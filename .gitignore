@@ -13,7 +13,6 @@ xcuserdata/
 *.moved-aside
 
 # Go
-Go/mihomo-bridge/go.sum
 Go/mihomo-bridge/vendor/
 
 # Framework (built from Go source)
