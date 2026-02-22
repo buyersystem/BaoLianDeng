@@ -40,9 +40,11 @@ struct AboutView: View {
             }
 
             Section("License") {
-                Text("This app is open source and distributed under the MIT License.")
+                Text("Copyright (c) 2026 Max Lv <max.c.lv@gmail.com>")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                Link(destination: URL(string: "https://github.com/madeye/BaoLianDeng/blob/main/LICENSE")!) {
+                    Label("MIT License", systemImage: "doc.text")
+                }
             }
         }
         .navigationTitle("About")

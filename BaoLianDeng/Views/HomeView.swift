@@ -186,6 +186,7 @@ struct HomeView: View {
                             onSelect: {
                                 selectedNode = node.name
                                 saveSelectedNode(node.name)
+                                reapplyConfigForSelectedNode()
                             }
                         )
                     }
@@ -230,7 +231,8 @@ struct HomeView: View {
         }
         // Apply the subscription YAML to config.yaml so the VPN uses it
         if let raw = sub.rawContent {
-            try? ConfigManager.shared.applySubscriptionConfig(raw)
+            try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: selectedNode)
+            Task { await ConfigManager.shared.downloadGeoDataIfNeeded() }
         }
     }
 
@@ -260,6 +262,13 @@ struct HomeView: View {
             .set(name, forKey: "selectedNode")
     }
 
+    private func reapplyConfigForSelectedNode() {
+        guard let selectedID = selectedSubscriptionID,
+              let sub = subscriptions.first(where: { $0.id == selectedID }),
+              let raw = sub.rawContent else { return }
+        try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: selectedNode)
+    }
+
     private func deleteSubscription(at offsets: IndexSet) {
         for i in offsets where subscriptions[i].id == selectedSubscriptionID {
             selectedSubscriptionID = nil
@@ -283,7 +292,8 @@ struct HomeView: View {
                     subscriptions[i].isUpdating = false
                     // Re-apply config if this is the selected subscription
                     if subscriptions[i].id == selectedSubscriptionID {
-                        try? ConfigManager.shared.applySubscriptionConfig(result.raw)
+                        try? ConfigManager.shared.applySubscriptionConfig(result.raw, selectedNode: selectedNode)
+                        await ConfigManager.shared.downloadGeoDataIfNeeded()
                     }
                 }
                 saveSubscriptions()
@@ -324,7 +334,15 @@ struct HomeView: View {
             }
         }
 
+        // Re-apply config for the selected subscription
+        if let selectedID = selectedSubscriptionID,
+           let sub = subscriptions.first(where: { $0.id == selectedID }),
+           let raw = sub.rawContent {
+            try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: selectedNode)
+        }
+
         saveSubscriptions()
+        await ConfigManager.shared.downloadGeoDataIfNeeded()
         isReloading = false
         reloadResult = ReloadResult(succeeded: succeeded, failed: failed)
     }

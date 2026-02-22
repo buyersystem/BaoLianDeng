@@ -1,6 +1,7 @@
 # Xcode
 build/
 DerivedData/
+xcuserdata/
 *.xcuserdata
 *.xcworkspace
 !*.xcodeproj/project.pbxproj
@@ -31,3 +32,6 @@ Pods/
 *.mobileprovision
 *.p12
 *.cer
+
+# Local build settings (contains DEVELOPMENT_TEAM)
+Local.xcconfig

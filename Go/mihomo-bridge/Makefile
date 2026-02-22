@@ -22,7 +22,7 @@ ios: setup
 		-target=ios,iossimulator \
 		-o $(OUTPUT_DIR)/$(FRAMEWORK_NAME).xcframework \
 		-iosversion=17.0 \
-		-tags=ios \
+		-tags=ios,with_gvisor \
 		-ldflags="-s -w" \
 		.
 
@@ -32,7 +32,7 @@ ios-arm64: setup
 		-target=ios/arm64 \
 		-o $(OUTPUT_DIR)/$(FRAMEWORK_NAME).xcframework \
 		-iosversion=17.0 \
-		-tags=ios \
+		-tags=ios,with_gvisor \
 		-ldflags="-s -w" \
 		.
 

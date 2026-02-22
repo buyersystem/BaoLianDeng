@@ -13,6 +13,7 @@ enum AppConstants {
     static let tunSubnetMask = "255.255.0.0"
     static let tunDNS = "198.18.0.2"
     static let externalControllerAddr = "127.0.0.1:9090"
+    static let dailyTrafficKey = "dailyTrafficRecords"
 }
 
 enum ProxyMode: String, CaseIterable, Identifiable {

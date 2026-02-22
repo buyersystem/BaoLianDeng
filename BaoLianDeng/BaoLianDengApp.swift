@@ -7,6 +7,7 @@ import SwiftUI
 @main
 struct BaoLianDengApp: App {
     @StateObject private var vpnManager = VPNManager.shared
+    @StateObject private var trafficStore = TrafficStore.shared
 
     init() {
         ConfigManager.shared.sanitizeConfig()
@@ -36,6 +37,7 @@ struct BaoLianDengApp: App {
                     }
             }
             .environmentObject(vpnManager)
+            .environmentObject(trafficStore)
         }
     }
 }

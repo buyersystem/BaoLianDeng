@@ -244,6 +244,7 @@ struct ConfigEditorView: View {
         // Apply edited YAML as the active config
         do {
             try ConfigManager.shared.applySubscriptionConfig(subscriptionText)
+            Task { await ConfigManager.shared.downloadGeoDataIfNeeded() }
             withAnimation { showSaved = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 withAnimation { showSaved = false }

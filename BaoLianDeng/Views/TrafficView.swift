@@ -3,94 +3,182 @@
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
 import SwiftUI
+import Charts
 
 struct TrafficView: View {
     @EnvironmentObject var vpnManager: VPNManager
-    @State private var uploadBytes: Int64 = 0
-    @State private var downloadBytes: Int64 = 0
-    @State private var timer: Timer?
+    @EnvironmentObject var trafficStore: TrafficStore
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Current Session") {
-                    HStack {
-                        Label("Upload", systemImage: "arrow.up.circle.fill")
-                            .foregroundStyle(.blue)
-                        Spacer()
-                        Text(formatBytes(uploadBytes))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-
-                    HStack {
-                        Label("Download", systemImage: "arrow.down.circle.fill")
-                            .foregroundStyle(.green)
-                        Spacer()
-                        Text(formatBytes(downloadBytes))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-
-                    HStack {
-                        Label("Total", systemImage: "arrow.up.arrow.down.circle.fill")
-                            .foregroundStyle(.purple)
-                        Spacer()
-                        Text(formatBytes(uploadBytes + downloadBytes))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                }
-
-                Section("Status") {
-                    HStack {
-                        Text("Connection")
-                        Spacer()
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(vpnManager.isConnected ? .green : .gray)
-                                .frame(width: 8, height: 8)
-                            Text(vpnManager.isConnected ? "Active" : "Inactive")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+                sessionSection
+                chartSection
+                monthlySummarySection
+                statusSection
             }
             .navigationTitle("Data")
-            .onAppear { startPolling() }
-            .onDisappear { stopPolling() }
-        }
-    }
-
-    private func startPolling() {
-        fetchTraffic()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            fetchTraffic()
-        }
-    }
-
-    private func stopPolling() {
-        timer?.invalidate()
-        timer = nil
-    }
-
-    private func fetchTraffic() {
-        guard vpnManager.isConnected else {
-            uploadBytes = 0
-            downloadBytes = 0
-            return
-        }
-
-        vpnManager.sendMessage(["action": "get_traffic"]) { data in
-            guard let data = data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                return
+            .onAppear {
+                if vpnManager.isConnected {
+                    trafficStore.startPolling()
+                }
             }
-            DispatchQueue.main.async {
-                uploadBytes = json["upload"] as? Int64 ?? 0
-                downloadBytes = json["download"] as? Int64 ?? 0
+            .onDisappear {
+                trafficStore.stopPolling()
+            }
+            .onChange(of: vpnManager.isConnected) { _, connected in
+                if connected {
+                    trafficStore.resetSession()
+                    trafficStore.startPolling()
+                } else {
+                    trafficStore.stopPolling()
+                }
             }
         }
+    }
+
+    // MARK: - Current Session (Proxy Only)
+
+    private var sessionSection: some View {
+        Section("Current Session (Proxy Only)") {
+            HStack {
+                Label("Upload", systemImage: "arrow.up.circle.fill")
+                    .foregroundStyle(.blue)
+                Spacer()
+                Text(formatBytes(trafficStore.sessionProxyUpload))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            HStack {
+                Label("Download", systemImage: "arrow.down.circle.fill")
+                    .foregroundStyle(.green)
+                Spacer()
+                Text(formatBytes(trafficStore.sessionProxyDownload))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            HStack {
+                Label("Total", systemImage: "arrow.up.arrow.down.circle.fill")
+                    .foregroundStyle(.purple)
+                Spacer()
+                Text(formatBytes(trafficStore.sessionTotal))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    // MARK: - Daily Bar Chart
+
+    private var chartSection: some View {
+        Section("Daily Proxy Traffic") {
+            if chartEntries.isEmpty {
+                ContentUnavailableView(
+                    "No Data",
+                    systemImage: "chart.bar",
+                    description: Text("Traffic data will appear here when VPN is active")
+                )
+                .frame(height: 200)
+            } else {
+                Chart(chartEntries, id: \.id) { entry in
+                    BarMark(
+                        x: .value("Day", entry.dayLabel),
+                        y: .value("Bytes", entry.megabytes)
+                    )
+                    .foregroundStyle(by: .value("Direction", entry.category))
+                }
+                .chartForegroundStyleScale([
+                    "Upload": Color.blue,
+                    "Download": Color.green,
+                ])
+                .chartYAxisLabel("MB")
+                .frame(height: 200)
+            }
+        }
+    }
+
+    // MARK: - Monthly Summary
+
+    private var monthlySummarySection: some View {
+        Section("Monthly Summary") {
+            HStack {
+                Label("Upload", systemImage: "arrow.up.circle")
+                    .foregroundStyle(.blue)
+                Spacer()
+                Text(formatBytes(trafficStore.currentMonthUpload))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            HStack {
+                Label("Download", systemImage: "arrow.down.circle")
+                    .foregroundStyle(.green)
+                Spacer()
+                Text(formatBytes(trafficStore.currentMonthDownload))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            HStack {
+                Label("Total", systemImage: "arrow.up.arrow.down.circle")
+                    .foregroundStyle(.purple)
+                Spacer()
+                Text(formatBytes(trafficStore.currentMonthTotal))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    // MARK: - Status
+
+    private var statusSection: some View {
+        Section("Status") {
+            HStack {
+                Text("Connection")
+                Spacer()
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(vpnManager.isConnected ? .green : .gray)
+                        .frame(width: 8, height: 8)
+                    Text(vpnManager.isConnected ? "Active" : "Inactive")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if vpnManager.isConnected {
+                HStack {
+                    Text("Active Connections")
+                    Spacer()
+                    Text("\(trafficStore.activeProxyCount) proxy / \(trafficStore.activeTotalCount) total")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        }
+    }
+
+    // MARK: - Chart Data
+
+    private var chartEntries: [TrafficChartEntry] {
+        let records = trafficStore.currentMonthRecords.sorted { $0.date < $1.date }
+        var entries: [TrafficChartEntry] = []
+        for record in records {
+            let dayLabel = String(record.date.suffix(2))
+            entries.append(TrafficChartEntry(
+                dayLabel: dayLabel, date: record.date,
+                megabytes: Double(record.proxyUpload) / 1_048_576.0,
+                category: "Upload"
+            ))
+            entries.append(TrafficChartEntry(
+                dayLabel: dayLabel, date: record.date,
+                megabytes: Double(record.proxyDownload) / 1_048_576.0,
+                category: "Download"
+            ))
+        }
+        return entries
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
@@ -100,7 +188,17 @@ struct TrafficView: View {
     }
 }
 
+private struct TrafficChartEntry {
+    let dayLabel: String
+    let date: String
+    let megabytes: Double
+    let category: String
+
+    var id: String { "\(date)-\(category)" }
+}
+
 #Preview {
     TrafficView()
         .environmentObject(VPNManager.shared)
+        .environmentObject(TrafficStore.shared)
 }

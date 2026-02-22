@@ -29,6 +29,7 @@
 		A10040 /* PacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C20001; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A10041 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10040; };
 		A10042 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10040; };
+		A10060 /* TrafficStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -87,6 +88,8 @@
 		B10022 /* PacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PacketTunnel.entitlements; sourceTree = "<group>"; };
 		B10030 /* MihomoCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = MihomoCore.xcframework; sourceTree = "<group>"; };
 		B10040 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
+		B10070 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
+		B10060 /* TrafficStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficStore.swift; sourceTree = "<group>"; };
 		C10001 /* BaoLianDeng.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BaoLianDeng.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C20001 /* PacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -116,6 +119,7 @@
 		G10001 /* Root */ = {
 			isa = PBXGroup;
 			children = (
+				B10070,
 				G10002,
 				G10003,
 				G10004,
@@ -132,6 +136,7 @@
 				B10011,
 				B10012,
 				B10010,
+				G10009,
 				G10008,
 			);
 			path = BaoLianDeng;
@@ -180,6 +185,14 @@
 				C20001,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		G10009 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B10060,
+			);
+			path = Models;
 			sourceTree = "<group>";
 		};
 		G10008 /* Views */ = {
@@ -309,6 +322,7 @@
 				A10009,
 				A10050,
 				A10051,
+				A10060,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -336,6 +350,7 @@
 		/* Debug - Project */
 		Y10001 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B10070;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -367,6 +382,7 @@
 		/* Release - Project */
 		Y10002 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B10070;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -395,7 +411,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = BaoLianDeng/BaoLianDeng.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				CURRENT_PROJECT_VERSION = 1;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -428,7 +443,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = BaoLianDeng/BaoLianDeng.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				CURRENT_PROJECT_VERSION = 1;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -460,7 +474,6 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				CURRENT_PROJECT_VERSION = 1;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -490,7 +503,6 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
 				CURRENT_PROJECT_VERSION = 1;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
