@@ -137,6 +137,49 @@ rules:
   - MATCH,PROXY
 ```
 
+## Install Pre-built IPA (Self-Signing)
+
+Pre-built IPA files are available on the [Releases](https://github.com/madeye/BaoLianDeng/releases) page. Since they are development builds, you need to re-sign with your own Apple Developer certificate before installing.
+
+### AltStore / SideStore
+
+1. Download `BaoLianDeng.ipa` from the latest release
+2. Open [AltStore](https://altstore.io/) or [SideStore](https://sidestore.io/) on your device
+3. Tap **+** and select the downloaded IPA
+4. The app will be automatically re-signed and installed
+
+### Sideloadly (macOS / Windows)
+
+1. Download and install [Sideloadly](https://sideloadly.io/)
+2. Connect your iPhone via USB
+3. Drag `BaoLianDeng.ipa` into Sideloadly
+4. Enter your Apple ID and click **Start**
+5. Trust the developer profile on your device: **Settings → General → VPN & Device Management**
+
+### Manual re-sign with codesign (macOS)
+
+```bash
+# Unzip the IPA
+unzip BaoLianDeng.ipa -d Payload
+
+# Find your signing identity
+security find-identity -v -p codesigning
+
+# Re-sign the Network Extension first, then the app
+codesign -f -s "Apple Development: you@example.com (XXXXXXXXXX)" \
+  --entitlements PacketTunnel.entitlements \
+  Payload/BaoLianDeng.app/PlugIns/PacketTunnel.appex
+
+codesign -f -s "Apple Development: you@example.com (XXXXXXXXXX)" \
+  --entitlements BaoLianDeng.entitlements \
+  Payload/BaoLianDeng.app
+
+# Re-package
+zip -r BaoLianDeng-signed.ipa Payload
+```
+
+> **Note:** This app requires **Network Extension (packet-tunnel-provider)** and **App Groups** entitlements. Free Apple Developer accounts may not support Network Extension — a paid Apple Developer account ($99/year) is recommended.
+
 ## Project Structure
 
 ```
