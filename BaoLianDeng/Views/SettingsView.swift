@@ -12,12 +12,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Proxy") {
-                    NavigationLink("Proxy Groups") {
-                        ProxyGroupView()
-                    }
-                }
-
                 Section("General") {
                     Picker("Log Level", selection: $logLevel) {
                         Text("Silent").tag("silent")

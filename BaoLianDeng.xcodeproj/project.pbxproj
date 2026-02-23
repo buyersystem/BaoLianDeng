@@ -13,7 +13,6 @@
 		A10051 /* YAMLEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10051; };
 		A10003 /* TrafficView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003; };
 		A10004 /* ConfigEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004; };
-		A10005 /* ProxyGroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10005; };
 		A10006 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10006; };
 		A10035 /* TunnelLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10035; };
 		A10007 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007; };
@@ -101,7 +100,6 @@
 		B10051 /* YAMLEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YAMLEditor.swift; sourceTree = "<group>"; };
 		B10003 /* TrafficView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficView.swift; sourceTree = "<group>"; };
 		B10004 /* ConfigEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigEditorView.swift; sourceTree = "<group>"; };
-		B10005 /* ProxyGroupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyGroupView.swift; sourceTree = "<group>"; };
 		B10006 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		B10035 /* TunnelLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelLogView.swift; sourceTree = "<group>"; };
 		B10007 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
@@ -247,7 +245,6 @@
 				B10002,
 				B10003,
 				B10004,
-				B10005,
 				B10006,
 				B10035,
 				B10050,
@@ -391,7 +388,6 @@
 				A10002,
 				A10003,
 				A10004,
-				A10005,
 				A10006,
 				A10035,
 				A10007,

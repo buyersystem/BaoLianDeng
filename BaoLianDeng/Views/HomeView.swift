@@ -16,15 +16,37 @@ struct HomeView: View {
     @State private var isReloading = false
     @State private var reloadResult: ReloadResult?
     @State private var expandedSubscriptionIDs: Set<UUID> = []
+    @State private var scrollProxy: ScrollViewProxy?
 
     var body: some View {
         NavigationStack {
-            List {
-                connectSection
-                modeSection
-                subscriptionSections
+            VStack(spacing: 0) {
+                List {
+                    connectSection
+                }
+                .listStyle(.insetGrouped)
+                .scrollDisabled(true)
+                .frame(height: vpnManager.errorMessage != nil ? 185 : 155)
+
+                ScrollViewReader { proxy in
+                    List {
+                        Section(header:
+                            Text("Subscriptions")
+                                .id("subscriptionsTop")
+                        ) {
+                            subscriptionSections
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                    .onAppear { scrollProxy = proxy }
+                }
             }
             .navigationTitle("BaoLianDeng")
+            .onTapGesture(count: 2) {
+                withAnimation {
+                    scrollProxy?.scrollTo("subscriptionsTop", anchor: .top)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { showAddSubscription = true }) {
@@ -97,13 +119,7 @@ struct HomeView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-        }
-    }
 
-    // MARK: - Mode Section
-
-    private var modeSection: some View {
-        Section {
             Picker("Routing", selection: $selectedMode) {
                 ForEach(ProxyMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
@@ -113,8 +129,6 @@ struct HomeView: View {
             .onChange(of: selectedMode) { _, newMode in
                 vpnManager.switchMode(newMode)
             }
-        } footer: {
-            Text(modeDescription)
         }
     }
 
@@ -123,25 +137,22 @@ struct HomeView: View {
     @ViewBuilder
     private var subscriptionSections: some View {
         if subscriptions.isEmpty {
-            Section {
-                VStack(spacing: 12) {
-                    Image(systemName: "tray")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.secondary)
-                    Text("No Subscriptions")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    Text("Tap + to add a subscription URL")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
+            VStack(spacing: 12) {
+                Image(systemName: "tray")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.secondary)
+                Text("No Subscriptions")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                Text("Tap + to add a subscription URL")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
         } else {
             ForEach($subscriptions) { $sub in
-                Section {
-                    HStack {
+                HStack {
                         Button(action: {
                             if selectedSubscriptionID != sub.id {
                                 selectSubscription(sub)
@@ -199,18 +210,17 @@ struct HomeView: View {
                         .tint(.orange)
                     }
 
-                    if expandedSubscriptionIDs.contains(sub.id) {
-                        ForEach(sub.nodes) { node in
-                            NodeRow(
-                                node: node,
-                                isSelected: node.name == selectedNode,
-                                onSelect: {
-                                    selectedNode = node.name
-                                    saveSelectedNode(node.name)
-                                    reapplyConfigForSelectedNode()
-                                }
-                            )
-                        }
+                if expandedSubscriptionIDs.contains(sub.id) {
+                    ForEach(sub.nodes) { node in
+                        NodeRow(
+                            node: node,
+                            isSelected: node.name == selectedNode,
+                            onSelect: {
+                                selectedNode = node.name
+                                saveSelectedNode(node.name)
+                                reapplyConfigForSelectedNode()
+                            }
+                        )
                     }
                 }
             }
@@ -228,14 +238,6 @@ struct HomeView: View {
         case .reasserting: return "Reconnecting..."
         case .invalid: return "Not Configured"
         @unknown default: return "Unknown"
-        }
-    }
-
-    private var modeDescription: String {
-        switch selectedMode {
-        case .rule: return "Route traffic based on rules"
-        case .global: return "Route all traffic through proxy"
-        case .direct: return "All traffic goes direct"
         }
     }
 
