@@ -231,9 +231,9 @@ final class ConfigManager {
         }
     }
 
-    /// Merge subscription YAML: only take proxies/groups/providers, keep local rules.
+    /// Merge subscription YAML: take proxies, proxy-groups, rules, and their providers from subscription.
     private func mergeSubscription(_ yaml: String, selectedNode: String? = nil) -> String {
-        let wantedSections = ["proxies", "proxy-groups", "proxy-providers"]
+        let wantedSections = ["proxies", "proxy-groups", "proxy-providers", "rules", "rule-providers"]
         var extracted: [String: String] = [:]
         var currentKey: String? = nil
         var currentLines: [String] = []
@@ -315,8 +315,16 @@ final class ConfigManager {
             result += "\n\n" + proxyProviders
         }
 
-        // Append local rules (always from local config, never from subscription)
-        result += "\n\n" + rulesSection
+        if let ruleProviders = extracted["rule-providers"] {
+            result += "\n\n" + ruleProviders
+        }
+
+        // Use subscription rules if available, otherwise keep local rules
+        if let subRules = extracted["rules"] {
+            result += "\n\n" + subRules
+        } else {
+            result += "\n\n" + rulesSection
+        }
 
         return result
     }
