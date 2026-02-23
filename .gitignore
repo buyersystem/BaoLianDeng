@@ -32,5 +32,20 @@ Pods/
 *.p12
 *.cer
 
+# Fastlane
+fastlane/.env.default
+fastlane/report.xml
+fastlane/README.md
+
+# App Store Connect keys
+*.p8
+
+# Screenshots (generated)
+screenshots/
+
+# Bundler
+vendor/bundle/
+.bundle/
+
 # Local build settings (contains DEVELOPMENT_TEAM)
 Local.xcconfig

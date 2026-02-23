@@ -2,58 +2,68 @@
 
 iOS global proxy app powered by [Mihomo](https://github.com/MetaCubeX/mihomo) (Clash Meta) core.
 
+## Features
+
+- **Subscription Management** — Add, edit, refresh, and switch between proxy subscriptions (Clash YAML and base64 formats)
+- **Proxy Node Selection** — Browse nodes by subscription with protocol icons and latency indicators
+- **Traffic Analytics** — Daily bar charts, session stats, and monthly summaries for proxy-only traffic
+- **Config Editor** — In-app YAML editor with validation for both local config and subscription configs
+- **Proxy Groups** — View and switch proxy groups via Mihomo's REST API
+- **Tunnel Logs** — Real-time log viewer for debugging the network extension
+- **Aggressive Memory Management** — Go runtime tuned for iOS's ~15 MB network extension limit
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────┐
-│                iOS App (Swift)              │
-│  ┌─────────────┐  ┌─────────────────────┐  │
-│  │  SwiftUI    │  │  VPNManager         │  │
-│  │  MainView   │──│  (NETunnelProvider  │  │
-│  │  ConfigEdit │  │   Manager)          │  │
-│  └─────────────┘  └────────┬────────────┘  │
-├────────────────────────────┼────────────────┤
-│         Network Extension (PacketTunnel)    │
-│  ┌─────────────────────────┴──────────────┐ │
-│  │    NEPacketTunnelProvider              │ │
-│  │    ┌───────────────────────────────┐   │ │
-│  │    │  MihomoCore.xcframework (Go)  │   │ │
-│  │    │  - Proxy Engine               │   │ │
-│  │    │  - DNS (fake-ip)              │   │ │
-│  │    │  - Rules / Routing            │   │ │
-│  │    └───────────────────────────────┘   │ │
-│  └────────────────────────────────────────┘ │
+│              iOS App (SwiftUI)              │
+│  ┌──────────┬────────┬───────┬───────────┐ │
+│  │  Home    │ Config │ Data  │ Settings  │ │
+│  │ Subs &   │ YAML   │Charts │ Groups /  │ │
+│  │  Nodes   │ Editor │& Stats│ Logs      │ │
+│  └──────────┴────────┴───────┴───────────┘ │
+│  ┌───────────────────────────────────────┐  │
+│  │  VPNManager (NETunnelProviderManager) │  │
+│  └──────────────────┬────────────────────┘  │
+├─────────────────────┼──────────────────────-┤
+│       Network Extension (PacketTunnel)      │
+│  ┌──────────────────┴────────────────────┐  │
+│  │    NEPacketTunnelProvider             │  │
+│  │    ┌──────────────────────────────┐   │  │
+│  │    │  MihomoCore.xcframework (Go) │   │  │
+│  │    │  - Proxy Engine              │   │  │
+│  │    │  - DNS (fake-ip)             │   │  │
+│  │    │  - Rules / Routing           │   │  │
+│  │    └──────────────────────────────┘   │  │
+│  └───────────────────────────────────────┘  │
 └─────────────────────────────────────────────┘
 ```
+
+**IPC** between the app and tunnel extension uses `NETunnelProviderSession.sendMessage` for mode switching, traffic stats, and version queries. Both targets share config files and preferences via App Group `group.io.github.baoliandeng`.
 
 ## Prerequisites
 
 - macOS with Xcode 15+
-- Go 1.25+
-- `gomobile` and `gobind` are installed automatically by the build system — no manual setup needed
+- Go 1.22+
 
 ## Build
 
 ### 1. Build the Go framework
 
 ```bash
-make framework            # Build for iOS + Simulator (universal)
-make framework-arm64      # Build for arm64 only (faster, device-only)
+make framework          # iOS + Simulator (arm64 + x86_64)
+make framework-arm64    # arm64 only (faster, device-only)
 ```
 
-This compiles the Mihomo Go core into `Framework/MihomoCore.xcframework` using gomobile. To remove the built framework:
-
-```bash
-make clean
-```
+This compiles the Mihomo Go core into `Framework/MihomoCore.xcframework` using gomobile. The `make` target installs gomobile automatically if needed.
 
 ### 2. Configure signing
 
-Copy the xcconfig template and set your Apple development team ID:
+Copy the template and set your Apple development team ID:
 
 ```bash
 cp Local.xcconfig.template Local.xcconfig
-# Edit Local.xcconfig and replace YOUR_TEAM_ID_HERE with your Team ID
+# Edit Local.xcconfig and set DEVELOPMENT_TEAM = YOUR_TEAM_ID
 ```
 
 > **Finding your Team ID:** Apple Developer portal → Membership → Team ID (10-character string, e.g. `AB12CD34EF`).
@@ -72,7 +82,7 @@ open BaoLianDeng.xcodeproj
 
 Select your device and press `Cmd+R`.
 
-**CI-style simulator build (no signing required):**
+**CI-style simulator build (no signing):**
 
 ```bash
 xcodebuild build \
@@ -85,26 +95,20 @@ xcodebuild build \
 
 ## Configuration
 
-The app uses Mihomo YAML configuration format. Edit the config through the in-app editor or place a `config.yaml` in the app's shared container.
+The app ships with a sensible default config. You can also manage configuration through:
 
-Example config:
+1. **Subscriptions** (recommended) — Add a subscription URL in the Home tab. The app parses Clash YAML and base64-encoded proxy lists, merges proxies into the active config, and auto-downloads GeoIP/GeoSite databases for rule matching.
+
+2. **Config Editor** — Edit the YAML directly in the Config tab with syntax validation.
+
+3. **Manual file** — Place a `config.yaml` in the app's shared container.
+
+Example minimal config:
 
 ```yaml
 mixed-port: 7890
 mode: rule
 log-level: info
-allow-lan: false
-external-controller: 127.0.0.1:9090
-
-tun:
-  enable: true
-  stack: gvisor
-  dns-hijack:
-    - 198.18.0.2:53
-  auto-route: false
-  auto-detect-interface: false
-
-geo-auto-update: false
 
 dns:
   enable: true
@@ -113,7 +117,6 @@ dns:
   fake-ip-range: 198.18.0.1/16
   nameserver:
     - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
 
 proxies:
   - name: "my-proxy"
@@ -130,65 +133,43 @@ proxy-groups:
       - my-proxy
 
 rules:
-  # Google
-  - DOMAIN-SUFFIX,google.com,PROXY
-  - DOMAIN-SUFFIX,googleapis.com,PROXY
-  - DOMAIN-SUFFIX,googlevideo.com,PROXY
-  - DOMAIN-SUFFIX,gstatic.com,PROXY
-  - DOMAIN-SUFFIX,gmail.com,PROXY
-  # YouTube
-  - DOMAIN-SUFFIX,youtube.com,PROXY
-  - DOMAIN-SUFFIX,ytimg.com,PROXY
-  # Social
-  - DOMAIN-SUFFIX,twitter.com,PROXY
-  - DOMAIN-SUFFIX,x.com,PROXY
-  - DOMAIN-SUFFIX,instagram.com,PROXY
-  - DOMAIN-SUFFIX,facebook.com,PROXY
-  # Messaging
-  - DOMAIN-SUFFIX,telegram.org,PROXY
-  - DOMAIN-SUFFIX,t.me,PROXY
-  # Dev
-  - DOMAIN-SUFFIX,github.com,PROXY
-  - DOMAIN-SUFFIX,githubusercontent.com,PROXY
-  # AI
-  - DOMAIN-SUFFIX,openai.com,PROXY
-  - DOMAIN-SUFFIX,anthropic.com,PROXY
-  - DOMAIN-SUFFIX,claude.ai,PROXY
-  # Catch-all
   - GEOIP,CN,DIRECT
   - MATCH,PROXY
 ```
-
-> **Note:** The app includes a more comprehensive default config with additional rules when no config file is present. The TUN stack must be `gvisor` (not `system`) and `geo-auto-update` must be `false` for the Network Extension to work reliably. The app will auto-correct these settings on launch if needed.
 
 ## Project Structure
 
 ```
 BaoLianDeng/
-├── BaoLianDeng/              # Main iOS app target
-│   ├── BaoLianDengApp.swift  # App entry point
-│   ├── Views/                # SwiftUI views
-│   │   ├── HomeView.swift    #   VPN toggle, mode selector, subscriptions
-│   │   ├── ConfigEditorView  #   YAML config editor
-│   │   ├── TrafficView.swift #   Usage stats and charts
-│   │   ├── SettingsView.swift#   Proxy groups, log level, about
-│   │   └── ...               #   ProxyGroupView, TunnelLogView, etc.
-│   ├── Assets.xcassets/      # App assets
-│   └── Info.plist
-├── PacketTunnel/             # Network Extension target
+├── BaoLianDeng/                    # Main iOS app target
+│   ├── BaoLianDengApp.swift        # Entry point with TabView
+│   ├── Views/
+│   │   ├── HomeView.swift          # Subscriptions & node selection
+│   │   ├── ConfigEditorView.swift  # Dual-mode YAML editor
+│   │   ├── TrafficView.swift       # Daily charts & session stats
+│   │   ├── SettingsView.swift      # Proxy groups, log level, about
+│   │   ├── ProxyGroupView.swift    # Proxy group switching
+│   │   ├── TunnelLogView.swift     # Real-time log viewer
+│   │   ├── AboutView.swift         # App info & links
+│   │   └── YAMLEditor.swift        # YAML syntax highlighting
+│   ├── Models/
+│   │   └── TrafficStore.swift      # Traffic stats singleton
+│   └── Assets.xcassets/
+├── PacketTunnel/                   # Network Extension target
 │   └── PacketTunnelProvider.swift
-├── Shared/                   # Code shared between targets
-│   ├── Constants.swift       # App group ID, bundle IDs, network constants
-│   ├── ConfigManager.swift   # YAML config I/O, defaults, sanitization
-│   └── VPNManager.swift      # VPN lifecycle (ObservableObject)
-├── Go/mihomo-bridge/         # Go bridge to Mihomo core
-│   ├── bridge.go             # gomobile API boundary
-│   ├── tun_ios.go            # iOS TUN fd discovery
-│   ├── Makefile              # gomobile build (setup, ios, ios-arm64)
-│   └── patches/              # Vendored dependency patches
-├── Framework/                # Built xcframework output (gitignored)
-├── Local.xcconfig.template   # Copy to Local.xcconfig, set DEVELOPMENT_TEAM
-└── Makefile                  # Top-level: make framework / clean
+├── Shared/                         # Code shared between targets
+│   ├── Constants.swift             # App group ID, bundle IDs, network constants
+│   ├── ConfigManager.swift         # Config I/O, subscription merging, sanitization
+│   └── VPNManager.swift            # VPN lifecycle as ObservableObject
+├── Go/mihomo-bridge/               # Go bridge to Mihomo core
+│   ├── bridge.go                   # gomobile API (Bridge* exports)
+│   ├── tun_ios.go                  # iOS TUN device integration
+│   ├── Makefile                    # gomobile build targets
+│   └── patches/                    # iOS-specific dependency patches
+├── Framework/                      # Built MihomoCore.xcframework
+├── fastlane/                       # App Store metadata & upload
+├── scripts/                        # Screenshot automation
+└── Makefile                        # Top-level build (make framework)
 ```
 
 ## License
