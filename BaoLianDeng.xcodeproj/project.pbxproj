@@ -75,6 +75,25 @@
 		};
 /* End PBXCopyFilesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		F10003 /* Generate MihomoCore dSYM */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/MihomoCore.framework/MihomoCore",
+			);
+			name = "Generate MihomoCore dSYM";
+			outputPaths = (
+				"$(DWARF_DSYM_FOLDER_PATH)/MihomoCore.framework.dSYM",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Generate a dSYM for MihomoCore.xcframework so Xcode can upload it.\n# gomobile does not produce dSYMs, so dsymutil creates a stub with the correct UUID.\nif [ \"${CONFIGURATION}\" = \"Release\" ]; then\n    FRAMEWORK_BINARY=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/MihomoCore.framework/MihomoCore\"\n    DSYM_OUTPUT=\"${DWARF_DSYM_FOLDER_PATH}/MihomoCore.framework.dSYM\"\n    if [ -f \"${FRAMEWORK_BINARY}\" ] && [ ! -d \"${DSYM_OUTPUT}\" ]; then\n        dsymutil \"${FRAMEWORK_BINARY}\" -o \"${DSYM_OUTPUT}\" 2>/dev/null || true\n    fi\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXFileReference section */
 		B10001 /* BaoLianDengApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaoLianDengApp.swift; sourceTree = "<group>"; };
 		B10002 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -249,6 +268,7 @@
 				R10001,
 				F10002,
 				F10001,
+				F10003,
 			);
 			buildRules = (
 			);
