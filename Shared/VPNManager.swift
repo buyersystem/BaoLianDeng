@@ -74,6 +74,9 @@ final class VPNManager: ObservableObject {
             if connection.status != .connecting && connection.status != .disconnecting {
                 self?.isProcessing = false
             }
+            if connection.status == .disconnected {
+                VPNManager.clearTunnelLog()
+            }
         }
 
         status = connection.status
@@ -174,5 +177,13 @@ final class VPNManager: ObservableObject {
 
     func switchMode(_ mode: ProxyMode) {
         sendMessage(["action": "switch_mode", "mode": mode.rawValue]) { _ in }
+    }
+
+    private static func clearTunnelLog() {
+        guard let dir = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
+        ) else { return }
+        let logURL = dir.appendingPathComponent("tunnel.log")
+        try? FileManager.default.removeItem(at: logURL)
     }
 }

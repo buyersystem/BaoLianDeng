@@ -100,6 +100,9 @@ func SetLogFile(path string) error {
 		sub := log.Subscribe()
 		go func() {
 			for event := range sub {
+				if event.LogLevel < log.Level() {
+					continue
+				}
 				logFileMu.Lock()
 				if logFile != nil {
 					fmt.Fprintf(logFile, "[Mihomo/%s] %s\n", event.LogLevel, event.Payload)

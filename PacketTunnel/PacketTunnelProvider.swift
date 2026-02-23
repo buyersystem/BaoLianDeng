@@ -248,7 +248,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private func setupLogging() {
-        BridgeUpdateLogLevel("debug")
+        let level = UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
+            .string(forKey: "logLevel") ?? "info"
+        BridgeUpdateLogLevel(level)
     }
 
     /// Log traffic counters every 3s for the first 120s after startup.
