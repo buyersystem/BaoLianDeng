@@ -137,11 +137,19 @@ rules:
   - MATCH,PROXY
 ```
 
-## Install Pre-built IPA (Self-Signing)
+## Install Pre-built IPA
 
-Pre-built IPA files are available on the [Releases](https://github.com/madeye/BaoLianDeng/releases) page. Since they are development builds, you need to re-sign with your own Apple Developer certificate before installing.
+Pre-built IPA files are available on the [Releases](https://github.com/madeye/BaoLianDeng/releases) page.
 
-### AltStore / SideStore
+### AltStore / SideStore (Recommended)
+
+Add this source URL in AltStore or SideStore to receive automatic updates:
+
+```
+https://raw.githubusercontent.com/madeye/BaoLianDeng/main/altstore-source.json
+```
+
+**Or** install manually from a downloaded IPA:
 
 1. Download `BaoLianDeng.ipa` from the latest release
 2. Open [AltStore](https://altstore.io/) or [SideStore](https://sidestore.io/) on your device
