@@ -1,0 +1,21 @@
+# App identity
+app_identifier "io.github.baoliandeng"
+
+# Metadata and screenshots paths
+metadata_path "./fastlane/metadata"
+screenshots_path "./screenshots"
+
+# Age rating
+app_rating_config_path "./fastlane/rating_config.json"
+
+# Pricing
+price_tier 0
+
+# Submission compliance (used when submit_for_review is true)
+submission_information({
+  export_compliance_uses_encryption: true,
+  export_compliance_is_exempt: true,
+  add_id_info_uses_idfa: false,
+  content_rights_has_rights: true,
+  content_rights_contains_third_party_content: true,
+})

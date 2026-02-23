@@ -1,0 +1,7 @@
+Initial release of BaoLianDeng.
+
+- One-tap VPN connection with rule-based, global, and direct routing modes
+- Subscription management with Clash YAML and base64 support
+- Real-time traffic monitoring
+- Built-in configuration editor
+- Support for Shadowsocks, VMess, VLESS, Trojan, Hysteria, and WireGuard protocols

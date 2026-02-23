@@ -33,9 +33,10 @@ Pods/
 *.cer
 
 # Fastlane
-fastlane/.env.default
+fastlane/.env*
 fastlane/report.xml
 fastlane/README.md
+fastlane/metadata/review_information/
 
 # App Store Connect keys
 *.p8

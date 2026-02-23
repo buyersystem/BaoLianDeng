@@ -1,0 +1,43 @@
+default_platform(:ios)
+
+platform :ios do
+  before_all do
+    app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: File.read(ENV.fetch("ASC_KEY_P8_PATH")),
+      in_house: false,
+    )
+  end
+
+  desc "Upload screenshots to App Store Connect"
+  lane :upload_screenshots do
+    deliver(
+      skip_binary_upload: true,
+      skip_metadata: true,
+      overwrite_screenshots: true,
+      screenshots_path: "./screenshots",
+      precheck_include_in_app_purchases: false,
+    )
+  end
+
+  desc "Upload metadata to App Store Connect"
+  lane :upload_metadata do
+    deliver(
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      force: true,
+      precheck_include_in_app_purchases: false,
+    )
+  end
+
+  desc "Upload everything (metadata + screenshots) to App Store Connect"
+  lane :upload_all do
+    deliver(
+      skip_binary_upload: true,
+      overwrite_screenshots: true,
+      force: true,
+      precheck_include_in_app_purchases: false,
+    )
+  end
+end
