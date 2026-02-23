@@ -73,6 +73,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         ConfigManager.shared.sanitizeConfig()
         log("Config sanitized")
 
+        ConfigManager.shared.applyMode()
+        log("Mode applied")
+
         // Log config summary for debugging
         if let cfg = try? String(contentsOfFile: configPath, encoding: .utf8) {
             log("config.yaml preview: \(String(cfg.prefix(300)))")
@@ -158,12 +161,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         switch action {
-        case "switch_mode":
-            if let mode = message["mode"] as? String {
-                handleSwitchMode(mode)
-            }
-            completionHandler?(responseData(["status": "ok"]))
-
         case "get_traffic":
             let up = BridgeGetUploadTraffic()
             let down = BridgeGetDownloadTraffic()
@@ -273,36 +270,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         timer.resume()
         diagnosticTimer = timer
-    }
-
-    private func handleSwitchMode(_ mode: String) {
-        guard let configDir = configDirectory else { return }
-        let configPath = configDir + "/config.yaml"
-
-        guard var config = try? String(contentsOfFile: configPath, encoding: .utf8) else { return }
-
-        // Replace mode value in YAML
-        let modes = ["rule", "global", "direct"]
-        for m in modes {
-            config = config.replacingOccurrences(of: "mode: \(m)", with: "mode: \(mode)")
-        }
-
-        try? config.write(toFile: configPath, atomically: true, encoding: .utf8)
-
-        // Restart the engine with updated config
-        BridgeStopProxy()
-
-        // Re-set the TUN fd since StopProxy clears it
-        if let fd = tunnelFileDescriptor {
-            var err: NSError?
-            BridgeSetTUNFd(Int32(fd), &err)
-        }
-
-        var err: NSError?
-        BridgeStartProxy(&err)
-        if let err = err {
-            log("ERROR: Failed to restart with new mode: \(err)")
-        }
     }
 
     private func responseData(_ dict: [String: Any]) -> Data? {

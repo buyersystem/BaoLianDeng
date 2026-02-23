@@ -52,6 +52,80 @@ final class ConfigManager {
         return fileManager.fileExists(atPath: fileURL.path)
     }
 
+    /// Save the desired mode to UserDefaults. The tunnel reads this on startup.
+    func setMode(_ mode: String) {
+        UserDefaults(suiteName: AppConstants.appGroupIdentifier)?.set(mode, forKey: "proxyMode")
+    }
+
+    /// Apply the saved mode to config.yaml. Call after applySelectedSubscription/sanitizeConfig.
+    func applyMode() {
+        let mode = UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
+            .string(forKey: "proxyMode") ?? "rule"
+        guard var config = try? loadConfig() else { return }
+        let modes = ["rule", "global", "direct"]
+        for m in modes {
+            config = config.replacingOccurrences(of: "mode: \(m)", with: "mode: \(mode)")
+        }
+        config = updateGlobalProxyGroup(config, enabled: mode == "global")
+        try? saveConfig(config)
+    }
+
+    /// Add or remove a GLOBAL proxy group with the selected node.
+    /// Mihomo's `mode: global` routes all traffic through the built-in GLOBAL selector,
+    /// so we need to define it with the user's selected proxy node.
+    func updateGlobalProxyGroup(_ yaml: String, enabled: Bool) -> String {
+        // First, strip any existing GLOBAL group
+        var lines = yaml.components(separatedBy: "\n")
+        if let pgIdx = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("proxy-groups:")
+        }) {
+            var i = pgIdx + 1
+            while i < lines.count {
+                let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+                if trimmed == "- name: GLOBAL" {
+                    // Remove this group entry until the next group or end of section
+                    let start = i
+                    i += 1
+                    while i < lines.count {
+                        let t = lines[i].trimmingCharacters(in: .whitespaces)
+                        let isTopLevel = !lines[i].hasPrefix(" ") && !lines[i].hasPrefix("\t") && !t.isEmpty
+                        if isTopLevel || t.hasPrefix("- name:") { break }
+                        i += 1
+                    }
+                    lines.removeSubrange(start..<i)
+                    break
+                }
+                let isTopLevel = !lines[i].hasPrefix(" ") && !lines[i].hasPrefix("\t") && !trimmed.isEmpty
+                if isTopLevel { break }
+                i += 1
+            }
+        }
+
+        guard enabled else { return lines.joined(separator: "\n") }
+
+        // Read selected node from shared UserDefaults
+        let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
+        let selectedNode = defaults?.string(forKey: "selectedNode")
+
+        // Find proxy-groups: line and insert GLOBAL group right after it
+        guard let pgIdx = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("proxy-groups:")
+        }) else { return lines.joined(separator: "\n") }
+
+        var globalGroup = [
+            "  - name: GLOBAL",
+            "    type: select",
+            "    proxies:",
+        ]
+        if let node = selectedNode, !node.isEmpty {
+            globalGroup.append("      - \(node)")
+        }
+        globalGroup.append("      - DIRECT")
+
+        lines.insert(contentsOf: globalGroup, at: pgIdx + 1)
+        return lines.joined(separator: "\n")
+    }
+
     /// Patch the on-disk config.yaml to disable geo data downloads, which would
     /// block the Network Extension during startup. Safe to call on every launch.
     func sanitizeConfig() {

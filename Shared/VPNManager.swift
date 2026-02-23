@@ -176,7 +176,24 @@ final class VPNManager: ObservableObject {
     }
 
     func switchMode(_ mode: ProxyMode) {
-        sendMessage(["action": "switch_mode", "mode": mode.rawValue]) { _ in }
+        // Update config on disk, then restart the tunnel so it picks up the change
+        ConfigManager.shared.setMode(mode.rawValue)
+        guard isConnected else { return }
+        isProcessing = true
+        manager?.connection.stopVPNTunnel()
+
+        // Wait for disconnect, then restart
+        DispatchQueue.global().async { [weak self] in
+            // Poll for disconnected state (up to 5s)
+            for _ in 0..<50 {
+                if self?.manager?.connection.status == .disconnected { break }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            DispatchQueue.main.async {
+                self?.isProcessing = false
+                self?.start()
+            }
+        }
     }
 
     private static func clearTunnelLog() {
