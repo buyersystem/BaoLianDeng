@@ -15,10 +15,7 @@ make framework-arm64    # Build for arm64 only (faster, device-only)
 make clean              # Remove built framework
 ```
 
-### Go tooling setup (done automatically by `make framework`)
-```bash
-cd Go/mihomo-bridge && make setup   # Install gomobile and gobind
-```
+Go tooling setup is done automatically by `make framework`. The gomobile build uses tags `ios,with_gvisor` and `-ldflags="-s -w"` to strip debug info.
 
 ### iOS App (Xcode)
 ```bash
@@ -35,8 +32,113 @@ xcodebuild build \
 
 ### Linting
 ```bash
-swiftlint lint --strict    # SwiftLint (optional, CI continues on error)
+swiftlint lint --strict    # No .swiftlint.yml — uses SwiftLint defaults
 ```
+
+### Screenshot Tests
+```bash
+scripts/take_screenshots.sh    # Runs XCUITests across 4 device simulators, exports PNGs
+```
+The test source is `BaoLianDengUITests/ScreenshotTests.swift` — captures each tab (Home, Config, Data, Settings).
+
+### Fastlane (App Store uploads)
+Requires `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_PATH` environment variables.
+```bash
+fastlane upload_screenshots    # Upload screenshots to App Store Connect
+fastlane upload_metadata       # Upload metadata only
+fastlane upload_all            # Upload both
+fastlane submit_for_review     # Submit current version for App Store review
+```
+
+## Release Deployment
+
+Full release checklist. Credentials are in `~/.appstoreconnect/` (gitignored).
+
+### 1. Bump version
+```bash
+xcrun agvtool new-marketing-version 2.x
+xcrun agvtool new-version -all <build>   # increment from previous build number
+```
+
+### 2. Update landing page
+Edit `docs/index.html` — update the `hero-version` badge tag and all IPA download links to the new version.
+
+### 3. Build & upload to App Store Connect
+```bash
+# Archive
+xcodebuild archive \
+  -project BaoLianDeng.xcodeproj \
+  -scheme BaoLianDeng \
+  -configuration Release \
+  -destination 'generic/platform=iOS' \
+  -archivePath /tmp/BaoLianDeng-<version>.xcarchive
+
+# Export IPA  (ExportOptions.plist: method=app-store-connect, signingStyle=automatic)
+xcodebuild -exportArchive \
+  -archivePath /tmp/BaoLianDeng-<version>.xcarchive \
+  -exportPath /tmp/BaoLianDeng-<version>-export \
+  -exportOptionsPlist ExportOptions.plist
+
+# Upload
+xcrun altool --upload-app \
+  -f /tmp/BaoLianDeng-<version>-export/BaoLianDeng.ipa \
+  -t ios \
+  --apiKey 5MC8U9Z7P9 \
+  --apiIssuer 1200242f-e066-47cc-9ac8-b3affd0eee32
+# p8 key must be in ~/.private_keys/AuthKey_5MC8U9Z7P9.p8
+```
+
+### 4. Submit for review
+```bash
+ASC_KEY_ID=5MC8U9Z7P9 \
+ASC_ISSUER_ID=1200242f-e066-47cc-9ac8-b3affd0eee32 \
+ASC_KEY_P8_PATH=~/.appstoreconnect/AuthKey_5MC8U9Z7P9.p8 \
+fastlane submit_for_review
+```
+Notes:
+- The build must be `VALID` (processed) before submitting — usually takes a few minutes after upload.
+- If a previous version is `WAITING_FOR_REVIEW`, cancel its submission via ASC before creating a new version entry.
+- Set `usesNonExemptEncryption: false` on the build via ASC API if the submission is blocked by an encryption compliance error.
+
+### 5. Commit, tag, and GitHub release
+```bash
+git add BaoLianDeng.xcodeproj/project.pbxproj \
+        BaoLianDeng/Info.plist PacketTunnel/Info.plist \
+        docs/index.html
+git commit -m "Bump version to <version>"
+git push origin main
+
+gh release create v<version> \
+  --title "v<version>" \
+  --notes "..."
+
+# Attach IPA to release
+gh release upload v<version> /tmp/BaoLianDeng-<version>-export/BaoLianDeng.ipa \
+  --repo madeye/BaoLianDeng --clobber
+```
+
+### 6. Install on device (debug)
+```bash
+# Build debug for connected device
+xcodebuild build \
+  -project BaoLianDeng.xcodeproj -scheme BaoLianDeng \
+  -configuration Debug -destination 'id=<device-udid>'
+
+# Install
+xcrun devicectl device install app \
+  --device <device-udid> \
+  ~/Library/Developer/Xcode/DerivedData/BaoLianDeng-*/Build/Products/Debug-iphoneos/BaoLianDeng.app
+```
+
+### TestFlight testers
+Add an external tester via fastlane:
+```bash
+ASC_KEY_ID=5MC8U9Z7P9 \
+ASC_ISSUER_ID=1200242f-e066-47cc-9ac8-b3affd0eee32 \
+ASC_KEY_P8_PATH=~/.appstoreconnect/AuthKey_5MC8U9Z7P9.p8 \
+fastlane pilot add <email> --app_identifier io.github.baoliandeng
+```
+External testers require a beta group. The "External Testers" group (ID `3815404a-6e2f-4815-8ad7-e85acfe5f4ca`) was created on 2026-02-24.
 
 ## Architecture
 
@@ -46,7 +148,7 @@ swiftlint lint --strict    # SwiftLint (optional, CI continues on error)
 
 2. **PacketTunnel** (network extension) — `NEPacketTunnelProvider` that hosts the Go proxy engine. Discovers the TUN file descriptor by scanning fds 0–1024 for `utun*` interfaces, then passes it to Go via `BridgeSetTUNFd()`.
 
-3. **MihomoCore.xcframework** (Go) — Compiled from `Go/mihomo-bridge/` via gomobile. Exports functions prefixed with `Bridge` (e.g., `BridgeStartProxy`, `BridgeSetTUNFd`, `BridgeGetTrafficStats`).
+3. **MihomoCore.xcframework** (Go) — Compiled from `Go/mihomo-bridge/` via gomobile. Exports functions prefixed with `Bridge` (e.g., `BridgeStartProxy`, `BridgeSetTUNFd`).
 
 **Shared code** in `Shared/` is used by both targets:
 - `Constants.swift` — App group ID, bundle IDs, network constants
@@ -71,11 +173,21 @@ swiftlint lint --strict    # SwiftLint (optional, CI continues on error)
 ## Go Bridge
 
 `Go/mihomo-bridge/bridge.go` is the gomobile boundary. All exported functions must follow gomobile constraints (simple types only — no slices, maps, or interfaces in signatures). Key exports:
-- `SetHomeDir`, `SetConfig`, `SetTUNFd` — setup
-- `StartProxy`, `StopProxy`, `IsRunning` — lifecycle
-- `GetTrafficStats` — returns (up, down int64)
-- `ValidateConfig` — YAML validation
-- `ForceGC` — manual garbage collection
+- `SetHomeDir`, `SetConfig`, `SetLogFile`, `SetTUNFd` — setup
+- `StartProxy`, `StartWithExternalController`, `StopProxy`, `IsRunning` — lifecycle
+- `GetUploadTraffic`, `GetDownloadTraffic` — traffic stats (int64 bytes)
+- `ValidateConfig`, `ReadConfig` — config operations
+- `UpdateLogLevel`, `Version`, `ForceGC` — runtime control
+- `TestDirectTCP`, `TestProxyHTTP`, `TestDNSResolver`, `TestSelectedProxy` — diagnostics
+
+**Go patches** (`Go/mihomo-bridge/patches/`): Stubs for `gopsutil/process` and `go-m1cpu` that replace iOS-incompatible system calls (IOKit, procfs). These are `replace` directives in `go.mod`.
+
+## CI/CD
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to `main`:
+1. **build-framework** — Go 1.25 on macos-15, builds xcframework, uploads as artifact
+2. **build-app** — Downloads framework artifact, builds Debug + Release for iOS Simulator (creates empty `Local.xcconfig` to bypass signing)
+3. **swiftlint** — Runs `swiftlint lint --strict`, continues on error
 
 ## Sensitive Information
 
@@ -86,5 +198,5 @@ swiftlint lint --strict    # SwiftLint (optional, CI continues on error)
 ## Prerequisites
 
 - macOS with Xcode 15+
-- Go 1.22+
+- Go 1.22+ (CI uses 1.25, go.mod requires 1.25)
 - Signing requires: development team set for both targets, App Group and Network Extension capabilities enabled
