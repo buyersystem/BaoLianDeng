@@ -57,6 +57,18 @@ final class ConfigManager {
         UserDefaults(suiteName: AppConstants.appGroupIdentifier)?.set(mode, forKey: "proxyMode")
     }
 
+    /// Apply the saved log level to config.yaml so Mihomo's engine uses it on startup.
+    func applyLogLevel() {
+        let level = UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
+            .string(forKey: "logLevel") ?? "info"
+        guard var config = try? loadConfig() else { return }
+        let levels = ["debug", "info", "warning", "error", "silent"]
+        for l in levels {
+            config = config.replacingOccurrences(of: "log-level: \(l)", with: "log-level: \(level)")
+        }
+        try? saveConfig(config)
+    }
+
     /// Apply the saved mode to config.yaml. Call after applySelectedSubscription/sanitizeConfig.
     func applyMode() {
         let mode = UserDefaults(suiteName: AppConstants.appGroupIdentifier)?

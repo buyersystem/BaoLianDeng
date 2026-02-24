@@ -31,7 +31,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
-        setupLogging()
         // Clear old log on each tunnel start
         if let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier) {
             let logURL = dir.appendingPathComponent("tunnel.log")
@@ -72,6 +71,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // Sanitize subscription configs (fix stack, DNS, geo-auto-update)
         ConfigManager.shared.sanitizeConfig()
         log("Config sanitized")
+
+        ConfigManager.shared.applyLogLevel()
+        log("Log level applied to config")
 
         ConfigManager.shared.applyMode()
         log("Mode applied")
@@ -117,6 +119,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
             self?.log("Proxy started successfully")
             self?.proxyStarted = true
+            // Apply user's log level AFTER engine start, because
+            // hub.ApplyConfig resets log level from config.yaml's log-level field.
+            self?.setupLogging()
             self?.startMemoryManagement()
             self?.startDiagnosticLogging()
             completionHandler(nil)
