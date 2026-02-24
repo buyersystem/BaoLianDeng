@@ -40,4 +40,24 @@ platform :ios do
       precheck_include_in_app_purchases: false,
     )
   end
+
+  desc "Submit current version for App Store review"
+  lane :submit_for_review do
+    deliver(
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: true,
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        export_compliance_uses_encryption: true,
+        export_compliance_is_exempt: true,
+        add_id_info_uses_idfa: false,
+        content_rights_has_rights: true,
+        content_rights_contains_third_party_content: true,
+      },
+    )
+  end
 end
