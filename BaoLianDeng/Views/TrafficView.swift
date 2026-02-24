@@ -73,7 +73,7 @@ struct TrafficView: View {
     // MARK: - Daily Bar Chart
 
     private var chartSection: some View {
-        Section("Daily Proxy Traffic") {
+        Section("Daily Proxy Traffic (Last 30 Days)") {
             if chartEntries.isEmpty {
                 ContentUnavailableView(
                     "No Data",
@@ -82,19 +82,24 @@ struct TrafficView: View {
                 )
                 .frame(height: 200)
             } else {
-                Chart(chartEntries, id: \.id) { entry in
-                    BarMark(
-                        x: .value("Day", entry.dayLabel),
-                        y: .value("Bytes", entry.megabytes)
-                    )
-                    .foregroundStyle(by: .value("Direction", entry.category))
+                let dayCount = Set(chartEntries.map(\.dayLabel)).count
+                let chartWidth = max(CGFloat(dayCount) * 28, 300)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Chart(chartEntries, id: \.id) { entry in
+                        BarMark(
+                            x: .value("Day", entry.dayLabel),
+                            y: .value("Bytes", entry.megabytes)
+                        )
+                        .foregroundStyle(by: .value("Direction", entry.category))
+                    }
+                    .chartForegroundStyleScale([
+                        "Upload": Color.blue,
+                        "Download": Color.green,
+                    ])
+                    .chartYAxisLabel("MB")
+                    .frame(width: chartWidth, height: 200)
                 }
-                .chartForegroundStyleScale([
-                    "Upload": Color.blue,
-                    "Download": Color.green,
-                ])
-                .chartYAxisLabel("MB")
-                .frame(height: 200)
+                .defaultScrollAnchor(.trailing)
             }
         }
     }
@@ -163,10 +168,21 @@ struct TrafficView: View {
     // MARK: - Chart Data
 
     private var chartEntries: [TrafficChartEntry] {
-        let records = trafficStore.currentMonthRecords.sorted { $0.date < $1.date }
+        let records = trafficStore.dailyRecords.sorted { $0.date < $1.date }
         var entries: [TrafficChartEntry] = []
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateFormat = "M/d"
+        displayFormatter.locale = Locale(identifier: "en_US_POSIX")
         for record in records {
-            let dayLabel = String(record.date.suffix(2))
+            let dayLabel: String
+            if let date = formatter.date(from: record.date) {
+                dayLabel = displayFormatter.string(from: date)
+            } else {
+                dayLabel = String(record.date.suffix(5))
+            }
             entries.append(TrafficChartEntry(
                 dayLabel: dayLabel, date: record.date,
                 megabytes: Double(record.proxyUpload) / 1_048_576.0,
