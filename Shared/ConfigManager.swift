@@ -1,8 +1,20 @@
 // Copyright (c) 2026 Max Lv <max.c.lv@gmail.com>
 //
-// Licensed under the MIT License. See LICENSE file in the project root for details.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import Foundation
+import MihomoCore
 
 final class ConfigManager {
     static let shared = ConfigManager()
@@ -241,6 +253,15 @@ final class ConfigManager {
                 NSLog("[ConfigManager] Failed to download \(filename): \(error)")
             }
         }
+    }
+
+    /// Validate a subscription YAML by merging it with the base config and running Mihomo's parser.
+    /// Returns nil if valid, or an error message string if invalid.
+    func validateSubscriptionConfig(_ yaml: String) -> String? {
+        let merged = mergeSubscription(yaml)
+        var err: NSError?
+        BridgeValidateConfig(merged, &err)
+        return err?.localizedDescription
     }
 
     /// Merge subscription YAML: take proxies, proxy-groups, rules, and their providers from subscription.

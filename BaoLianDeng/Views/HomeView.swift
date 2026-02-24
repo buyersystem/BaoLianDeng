@@ -1,6 +1,17 @@
 // Copyright (c) 2026 Max Lv <max.c.lv@gmail.com>
 //
-// Licensed under the MIT License. See LICENSE file in the project root for details.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import SwiftUI
 import NetworkExtension
@@ -17,6 +28,8 @@ struct HomeView: View {
     @State private var reloadResult: ReloadResult?
     @State private var expandedSubscriptionIDs: Set<UUID> = []
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var toastMessage: String = ""
+    @State private var showToast: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -85,6 +98,29 @@ struct HomeView: View {
                 }
             }
             .onAppear { loadSubscriptions() }
+            .overlay {
+                if showToast {
+                    VStack {
+                        Spacer()
+                        Text(toastMessage)
+                            .font(.subheadline.weight(.medium))
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background(.thinMaterial)
+                            .clipShape(Capsule())
+                            .padding(.bottom, 80)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+        }
+    }
+
+    private func displayToast(_ message: String) {
+        toastMessage = message
+        withAnimation { showToast = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation { self.showToast = false }
         }
     }
 
@@ -316,20 +352,31 @@ struct HomeView: View {
     private func refreshSubscription(_ sub: inout Subscription) {
         let id = sub.id
         let url = sub.url
+        let name = sub.name
         sub.isUpdating = true
         Task {
             do {
                 let result = try await fetchSubscription(from: url)
+                if let validationError = ConfigManager.shared.validateSubscriptionConfig(result.raw) {
+                    if let i = subscriptions.firstIndex(where: { $0.id == id }) {
+                        subscriptions[i].isUpdating = false
+                    }
+                    displayToast("Invalid config from \(name)")
+                    NSLog("[HomeView] Validation failed for \(name): \(validationError)")
+                    return
+                }
                 if let i = subscriptions.firstIndex(where: { $0.id == id }) {
                     subscriptions[i].nodes = result.nodes
                     subscriptions[i].rawContent = result.raw
                     subscriptions[i].isUpdating = false
                 }
                 saveSubscriptions()
+                displayToast("Updated \(name)")
             } catch {
                 if let i = subscriptions.firstIndex(where: { $0.id == id }) {
                     subscriptions[i].isUpdating = false
                 }
+                displayToast("Failed to fetch \(name)")
             }
         }
     }
@@ -354,9 +401,13 @@ struct HomeView: View {
             for await (i, result) in group {
                 switch result {
                 case .success(let fetched):
-                    subscriptions[i].nodes = fetched.nodes
-                    subscriptions[i].rawContent = fetched.raw
-                    succeeded.append(subscriptions[i].name)
+                    if let validationError = ConfigManager.shared.validateSubscriptionConfig(fetched.raw) {
+                        failed.append((subscriptions[i].name, "Invalid config: \(validationError)"))
+                    } else {
+                        subscriptions[i].nodes = fetched.nodes
+                        subscriptions[i].rawContent = fetched.raw
+                        succeeded.append(subscriptions[i].name)
+                    }
                 case .failure(let error):
                     failed.append((subscriptions[i].name, error.localizedDescription))
                 }
