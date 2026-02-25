@@ -85,6 +85,33 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO | xcpretty && exit ${PIPESTATUS[0]}
 
+  test:
+    name: Unit Tests
+    runs-on: macos-15
+    needs: build-framework
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download framework artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MihomoCore.xcframework
+          path: Framework/MihomoCore.xcframework
+
+      - name: Create Local.xcconfig
+        run: touch Local.xcconfig
+
+      - name: Run tests
+        run: |
+          xcodebuild test \
+            -project BaoLianDeng.xcodeproj \
+            -scheme BaoLianDeng \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -only-testing:BaoLianDengTests \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO | xcpretty && exit ${PIPESTATUS[0]}
+
   swiftlint:
     name: SwiftLint
     runs-on: macos-15
