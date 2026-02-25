@@ -26,6 +26,7 @@ struct TrafficView: View {
                 sessionSection
                 chartSection
                 monthlySummarySection
+                subscriptionUsageSection
                 statusSection
             }
             .navigationTitle("Data")
@@ -148,6 +149,28 @@ struct TrafficView: View {
         }
     }
 
+    // MARK: - Subscription Usage
+
+    private var subscriptionUsageSection: some View {
+        Section {
+            NavigationLink {
+                SubscriptionUsageView()
+                    .environmentObject(trafficStore)
+            } label: {
+                HStack {
+                    Label("Usage by Subscription", systemImage: "chart.pie.fill")
+                    Spacer()
+                    if !trafficStore.subscriptionUsages.isEmpty {
+                        Text(formatBytes(trafficStore.subscriptionUsages.reduce(0) { $0 + $1.total }))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .font(.caption)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Status
 
     private var statusSection: some View {
@@ -222,6 +245,85 @@ private struct TrafficChartEntry {
     let category: String
 
     var id: String { "\(date)-\(category)" }
+}
+
+struct SubscriptionUsageView: View {
+    @EnvironmentObject var trafficStore: TrafficStore
+    @State private var showResetConfirmation = false
+
+    var body: some View {
+        List {
+            if trafficStore.subscriptionUsages.isEmpty {
+                ContentUnavailableView(
+                    "No Usage Data",
+                    systemImage: "chart.pie",
+                    description: Text("Connect the VPN to start attributing traffic to subscriptions")
+                )
+            } else {
+                ForEach(trafficStore.subscriptionUsages.sorted { $0.total > $1.total }) { usage in
+                    usageRow(for: usage)
+                }
+            }
+        }
+        .navigationTitle("Usage by Subscription")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !trafficStore.subscriptionUsages.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Reset", role: .destructive) {
+                        showResetConfirmation = true
+                    }
+                    .foregroundStyle(.red)
+                }
+            }
+        }
+        .confirmationDialog(
+            "Reset all subscription usage data?",
+            isPresented: $showResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset All", role: .destructive) { trafficStore.resetSubscriptionUsages() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently clear the usage counters for all subscriptions.")
+        }
+    }
+
+    private func usageRow(for usage: SubscriptionUsage) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(usage.name).font(.headline)
+            HStack {
+                Label(formatBytes(usage.upload), systemImage: "arrow.up.circle.fill")
+                    .font(.caption).foregroundStyle(.blue)
+                Spacer()
+                Label(formatBytes(usage.download), systemImage: "arrow.down.circle.fill")
+                    .font(.caption).foregroundStyle(.green)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.arrow.down.circle.fill").foregroundStyle(.purple)
+                    Text(formatBytes(usage.total)).foregroundStyle(.secondary)
+                }
+                .font(.caption)
+            }
+            GeometryReader { geo in
+                let grandTotal = trafficStore.subscriptionUsages.reduce(0) { $0 + $1.total }
+                let fraction = grandTotal > 0 ? Double(usage.total) / Double(grandTotal) : 0
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3).fill(Color(.systemFill)).frame(height: 6)
+                    RoundedRectangle(cornerRadius: 3).fill(Color.purple.opacity(0.7))
+                        .frame(width: geo.size.width * fraction, height: 6)
+                }
+            }
+            .frame(height: 6)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .binary
+        return formatter.string(fromByteCount: bytes)
+    }
 }
 
 #Preview {

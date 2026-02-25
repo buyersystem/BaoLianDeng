@@ -207,6 +207,19 @@ final class VPNManager: ObservableObject {
         }
     }
 
+    /// Disconnect the VPN so subscription fetches bypass the tunnel.
+    /// Returns true if the VPN was connected (caller should reconnect after fetching).
+    func disconnectForFetch() async -> Bool {
+        guard isConnected else { return false }
+        manager?.connection.stopVPNTunnel()
+        // Poll for disconnected state (up to 5s)
+        for _ in 0..<50 {
+            if manager?.connection.status == .disconnected { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return true
+    }
+
     private static func clearTunnelLog() {
         guard let dir = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier

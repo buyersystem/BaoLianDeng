@@ -23,6 +23,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -188,8 +189,10 @@ func StartProxy() error {
 		cfg.General.Tun.FileDescriptor = int(tunFdGlobal)
 		cfg.General.Tun.AutoRoute = false
 		cfg.General.Tun.AutoDetectInterface = false
-		cfg.General.Tun.Inet6Address = nil
-		bridgeLog("TUN: enable=true fd=%d ipv6=disabled", tunFdGlobal)
+		if prefix6, err := netip.ParsePrefix("fdfe:dcba:9876::1/126"); err == nil {
+			cfg.General.Tun.Inet6Address = []netip.Prefix{prefix6}
+		}
+		bridgeLog("TUN: enable=true fd=%d ipv6=fdfe:dcba:9876::1/126", tunFdGlobal)
 	} else {
 		bridgeLog("WARNING: tunFd=%d, TUN will NOT be enabled", tunFdGlobal)
 	}
@@ -246,7 +249,9 @@ func StartWithExternalController(addr, secret string) error {
 		cfg.General.Tun.FileDescriptor = int(tunFdGlobal)
 		cfg.General.Tun.AutoRoute = false
 		cfg.General.Tun.AutoDetectInterface = false
-		cfg.General.Tun.Inet6Address = nil
+		if prefix6, err := netip.ParsePrefix("fdfe:dcba:9876::1/126"); err == nil {
+			cfg.General.Tun.Inet6Address = []netip.Prefix{prefix6}
+		}
 	}
 
 	// hub.ApplyConfig starts both the external controller (REST API) and

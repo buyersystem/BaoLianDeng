@@ -30,6 +30,8 @@
 		A10042 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10040; };
 		A10060 /* TrafficStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060; };
 		A10080 /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10080; };
+		A10090 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090; };
+		A10091 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -116,6 +118,7 @@
 		B10070 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
 		B10060 /* TrafficStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficStore.swift; sourceTree = "<group>"; };
 		B10080 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
+		B10090 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 		C10001 /* BaoLianDeng.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BaoLianDeng.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C20001 /* PacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C30001 /* BaoLianDengUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BaoLianDengUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -190,6 +193,7 @@
 		G10004 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				B10090,
 				B10007,
 				B10008,
 				B10009,
@@ -390,6 +394,7 @@
 				A10004,
 				A10006,
 				A10035,
+				A10090,
 				A10007,
 				A10008,
 				A10009,
@@ -404,6 +409,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10020,
+				A10091,
 				A10021,
 				A10022,
 			);

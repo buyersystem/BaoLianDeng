@@ -25,6 +25,14 @@ struct DailyTraffic: Codable, Identifiable {
     var total: Int64 { proxyUpload + proxyDownload }
 }
 
+struct SubscriptionUsage: Codable, Identifiable {
+    var id: String       // UUID string of the subscription
+    var name: String     // Display name, kept fresh on each attribution
+    var upload: Int64
+    var download: Int64
+    var total: Int64 { upload + download }
+}
+
 private struct TrackedConnection {
     let id: String
     var upload: Int64
@@ -41,6 +49,7 @@ final class TrafficStore: ObservableObject {
     @Published var dailyRecords: [DailyTraffic] = []
     @Published var activeProxyCount: Int = 0
     @Published var activeTotalCount: Int = 0
+    @Published var subscriptionUsages: [SubscriptionUsage] = []
 
     var sessionTotal: Int64 { sessionProxyUpload + sessionProxyDownload }
 
@@ -56,11 +65,14 @@ final class TrafficStore: ObservableObject {
     private var trackedConnections: [String: TrackedConnection] = [:]
     private var closedProxyUpload: Int64 = 0
     private var closedProxyDownload: Int64 = 0
+    private var lastAttributedUpload: Int64 = 0
+    private var lastAttributedDownload: Int64 = 0
     private var todayBaseUpload: Int64 = 0
     private var todayBaseDownload: Int64 = 0
     private var currentDate: String = ""
     private var timer: Timer?
     private let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
+    private var subscriptionNameCache: [String: String] = [:]
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -71,16 +83,35 @@ final class TrafficStore: ObservableObject {
 
     private init() {
         loadRecords()
+        loadSubscriptionUsages()
+        refreshSubscriptionCache()
     }
 
     func startPolling() {
         stopPolling()
         currentDate = Self.dateFormatter.string(from: Date())
+        refreshSubscriptionCache()
         fetchConnections()
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.fetchConnections()
             }
+        }
+    }
+
+    private func refreshSubscriptionCache() {
+        Task.detached(priority: .utility) { [weak self] in
+            let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
+            var cache: [String: String] = [:]
+            if let data = defaults?.data(forKey: "subscriptions"),
+               let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                for sub in arr {
+                    if let sid = sub["id"] as? String, let n = sub["name"] as? String, !n.isEmpty {
+                        cache[sid] = n
+                    }
+                }
+            }
+            await MainActor.run { self?.subscriptionNameCache = cache }
         }
     }
 
@@ -98,6 +129,8 @@ final class TrafficStore: ObservableObject {
         sessionProxyDownload = 0
         activeProxyCount = 0
         activeTotalCount = 0
+        lastAttributedUpload = 0
+        lastAttributedDownload = 0
 
         loadRecords()
         currentDate = Self.dateFormatter.string(from: Date())
@@ -174,6 +207,16 @@ final class TrafficStore: ObservableObject {
         activeProxyCount = proxyCount
         activeTotalCount = connections.count
 
+        let deltaUp = sessionProxyUpload - lastAttributedUpload
+        let deltaDown = sessionProxyDownload - lastAttributedDownload
+        if (deltaUp > 0 || deltaDown > 0),
+           let subID = defaults?.string(forKey: "selectedSubscriptionID"),
+           !subID.isEmpty {
+            attributeDelta(upload: deltaUp, download: deltaDown, toSubscriptionID: subID)
+        }
+        lastAttributedUpload = sessionProxyUpload
+        lastAttributedDownload = sessionProxyDownload
+
         persistToday()
     }
 
@@ -220,8 +263,12 @@ final class TrafficStore: ObservableObject {
     }
 
     private func saveRecords() {
-        guard let data = try? JSONEncoder().encode(dailyRecords) else { return }
-        defaults?.set(data, forKey: AppConstants.dailyTrafficKey)
+        let snapshot = dailyRecords
+        Task.detached(priority: .background) {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
+                .set(data, forKey: AppConstants.dailyTrafficKey)
+        }
     }
 
     private func currentMonthPrefix() -> String {
@@ -229,5 +276,45 @@ final class TrafficStore: ObservableObject {
         f.dateFormat = "yyyy-MM"
         f.locale = Locale(identifier: "en_US_POSIX")
         return f.string(from: Date())
+    }
+
+    // MARK: - Subscription Usage
+
+    private func attributeDelta(upload: Int64, download: Int64, toSubscriptionID subID: String) {
+        let displayName = subscriptionNameCache[subID] ?? subID
+        if let idx = subscriptionUsages.firstIndex(where: { $0.id == subID }) {
+            subscriptionUsages[idx].upload += upload
+            subscriptionUsages[idx].download += download
+            subscriptionUsages[idx].name = displayName
+        } else {
+            subscriptionUsages.append(SubscriptionUsage(
+                id: subID, name: displayName, upload: upload, download: download
+            ))
+        }
+        saveSubscriptionUsages()
+    }
+
+    private func loadSubscriptionUsages() {
+        guard let data = defaults?.data(forKey: AppConstants.subscriptionUsageKey),
+              let usages = try? JSONDecoder().decode([SubscriptionUsage].self, from: data) else {
+            subscriptionUsages = []
+            return
+        }
+        subscriptionUsages = usages
+    }
+
+    private func saveSubscriptionUsages() {
+        let snapshot = subscriptionUsages
+        Task.detached(priority: .background) {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
+                .set(data, forKey: AppConstants.subscriptionUsageKey)
+        }
+    }
+
+    func resetSubscriptionUsages() {
+        subscriptionUsages.removeAll()
+        defaults?.removeObject(forKey: AppConstants.subscriptionUsageKey)
+        refreshSubscriptionCache()
     }
 }

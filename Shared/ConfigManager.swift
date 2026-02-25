@@ -15,6 +15,7 @@
 
 import Foundation
 import MihomoCore
+import os
 
 final class ConfigManager {
     static let shared = ConfigManager()
@@ -250,7 +251,7 @@ final class ConfigManager {
                 let (data, _) = try await URLSession.shared.data(from: url)
                 try data.write(to: fileURL)
             } catch {
-                NSLog("[ConfigManager] Failed to download \(filename): \(error)")
+                AppLogger.config.error("Failed to download \(filename, privacy: .public): \(error, privacy: .public)")
             }
         }
     }
@@ -258,10 +259,44 @@ final class ConfigManager {
     /// Validate a subscription YAML by merging it with the base config and running Mihomo's parser.
     /// Returns nil if valid, or an error message string if invalid.
     func validateSubscriptionConfig(_ yaml: String) -> String? {
+        // Ensure Mihomo's home directory is set so it can find geoip.metadb / geosite.dat
+        if let configDir = configDirectoryURL?.path {
+            BridgeSetHomeDir(configDir)
+            AppLogger.config.debug("validateSubscriptionConfig: homeDir=\(configDir, privacy: .public)")
+            // Check if geo files exist
+            let geoipPath = configDir + "/geoip.metadb"
+            let geositePath = configDir + "/geosite.dat"
+            AppLogger.config.debug("geoip.metadb exists: \(self.fileManager.fileExists(atPath: geoipPath)), geosite.dat exists: \(self.fileManager.fileExists(atPath: geositePath))")
+        }
         let merged = mergeSubscription(yaml)
+        AppLogger.config.debug("merged config length: \(merged.count), preview: \(String(merged.prefix(300)), privacy: .public)")
         var err: NSError?
         BridgeValidateConfig(merged, &err)
+        if let err = err {
+            AppLogger.config.error("BridgeValidateConfig error: \(err.localizedDescription, privacy: .public)")
+        } else {
+            AppLogger.config.info("BridgeValidateConfig: OK")
+        }
         return err?.localizedDescription
+    }
+
+    /// Write the merged config and error to a debug file for troubleshooting.
+    func dumpDebugMergedConfig(_ subscriptionYAML: String, error: String) {
+        guard let dir = sharedContainerURL else { return }
+        let merged = mergeSubscription(subscriptionYAML)
+        let debug = """
+        === VALIDATION ERROR ===
+        \(error)
+
+        === MERGED CONFIG ===
+        \(merged)
+
+        === RAW SUBSCRIPTION (first 2000 chars) ===
+        \(String(subscriptionYAML.prefix(2000)))
+        """
+        let debugURL = dir.appendingPathComponent("debug_merged_config.txt")
+        try? debug.write(to: debugURL, atomically: true, encoding: .utf8)
+        AppLogger.config.debug("Debug merged config written to \(debugURL.path, privacy: .public)")
     }
 
     /// Merge subscription YAML: take proxies, proxy-groups, rules, and their providers from subscription.
@@ -276,8 +311,21 @@ final class ConfigManager {
             extracted[key] = currentLines.joined(separator: "\n")
         }
 
-        for line in yaml.components(separatedBy: "\n") {
-            let isTopLevel = !line.hasPrefix(" ") && !line.hasPrefix("\t") && !line.isEmpty
+        // Normalize line endings: CRLF (\r\n) or bare CR (\r) → LF (\n).
+        // Without this, blank lines in CRLF YAMLs become "\r" after splitting on "\n".
+        // "\r" is non-empty and has no leading whitespace, so it passes the isTopLevel
+        // check, triggering flush() mid-section and cutting off everything after the
+        // first blank line inside proxy-groups or rules.
+        let normalized = yaml
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        for line in normalized.components(separatedBy: "\n") {
+            // A section header never starts with "-" (list item) or "#" (comment).
+            // Some providers emit list items at column 0 (no indentation), so we must
+            // exclude them here or every "- name: ..." line would flush the current section.
+            let isTopLevel = !line.hasPrefix(" ") && !line.hasPrefix("\t")
+                && !line.isEmpty && !line.hasPrefix("-") && !line.hasPrefix("#")
             if isTopLevel {
                 flush()
                 let key = String(line.prefix(while: { $0 != ":" }))
@@ -289,6 +337,9 @@ final class ConfigManager {
             }
         }
         flush()
+
+        // Log which sections were found to aid debugging.
+        AppLogger.config.debug("mergeSubscription extracted: \(wantedSections.map { k in extracted[k].map { "\(k)(\($0.count)ch)" } ?? "\(k):MISSING" }.joined(separator: ", "), privacy: .public)")
 
         // Split local config into header (up to proxies:) and rules (from rules: onward)
         // Use the current on-disk config so user edits are preserved; fall back to default
@@ -303,18 +354,26 @@ final class ConfigManager {
         var result = header
         result += "\n\n" + (extracted["proxies"] ?? "proxies: []")
 
-        // Find the first usable proxy group name from subscription
+        // Find the first usable proxy group name from subscription.
+        // Group entries look like "  - name: Foo" so trimmed gives "- name: Foo".
         var firstGroupName: String?
         if let pgYAML = extracted["proxy-groups"] {
             for line in pgYAML.components(separatedBy: "\n") {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if trimmed.hasPrefix("name:") {
-                    let name = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                // Match both "- name: Foo" (list item) and "name: Foo" (edge case)
+                let nameValue: String?
+                if trimmed.hasPrefix("- name:") {
+                    nameValue = String(trimmed.dropFirst(7)).trimmingCharacters(in: .whitespaces)
                         .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-                    if !name.isEmpty && name != "DIRECT" && name != "REJECT" {
-                        firstGroupName = name
-                        break
-                    }
+                } else if trimmed.hasPrefix("name:") {
+                    nameValue = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                } else {
+                    nameValue = nil
+                }
+                if let name = nameValue, !name.isEmpty, name != "DIRECT", name != "REJECT" {
+                    firstGroupName = name
+                    break
                 }
             }
         }
@@ -373,6 +432,7 @@ final class ConfigManager {
         tun:
           enable: true
           stack: gvisor
+          inet6-address: [fdfe:dcba:9876::1/126]
           dns-hijack:
             - \(AppConstants.tunDNS):53
           auto-route: false
@@ -382,6 +442,7 @@ final class ConfigManager {
 
         dns:
           enable: true
+          ipv6: true
           listen: 127.0.0.1:1053
           enhanced-mode: fake-ip
           fake-ip-range: 198.18.0.1/16

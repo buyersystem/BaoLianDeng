@@ -8,8 +8,8 @@ screenshots_path "./screenshots"
 # Age rating
 app_rating_config_path "./fastlane/rating_config.json"
 
-# Pricing
-price_tier 0
+# Pricing (commented out — set in App Store Connect directly)
+# price_tier 0
 
 # Submission compliance (used when submit_for_review is true)
 submission_information({

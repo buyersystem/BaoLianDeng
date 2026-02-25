@@ -15,6 +15,7 @@
 
 import NetworkExtension
 import MihomoCore
+import os
 
 class PacketTunnelProvider: NEPacketTunnelProvider {
     private var proxyStarted = false
@@ -24,7 +25,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     // Write log entries to shared container so the main app can read them
     private func log(_ message: String) {
         let line = "[\(Date())] \(message)\n"
-        NSLog("[BaoLianDeng] \(message)")
+        AppLogger.tunnel.info("\(message, privacy: .public)")
         guard let dir = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
         ) else { return }
@@ -51,7 +52,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             var logErr: NSError?
             BridgeSetLogFile(logURL.path, &logErr)
             if let logErr = logErr {
-                NSLog("[BaoLianDeng] WARNING: Could not set Go log file: \(logErr)")
+                AppLogger.tunnel.warning("Could not set Go log file: \(logErr, privacy: .public)")
             }
         }
         log("startTunnel called")
@@ -206,6 +207,14 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         )
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
+
+        // IPv6 - route all IPv6 traffic through the tunnel
+        let ipv6 = NEIPv6Settings(
+            addresses: [AppConstants.tunIPv6Address],
+            networkPrefixLengths: [NSNumber(value: AppConstants.tunIPv6PrefixLength)]
+        )
+        ipv6.includedRoutes = [NEIPv6Route.default()]
+        settings.ipv6Settings = ipv6
 
         // DNS - point to Mihomo's fake-ip DNS server
         let dns = NEDNSSettings(servers: [AppConstants.tunDNS])

@@ -330,6 +330,19 @@ struct ConfigEditorView: View {
         } else {
             subscriptionProxyGroups = ConfigManager.shared.parseProxyGroups(from: subscriptionText)
             subscriptionRules = ConfigManager.shared.parseRules(from: subscriptionText)
+            // If remote config has no proxy groups or rules, reset local config to defaults
+            if subscriptionProxyGroups.isEmpty || subscriptionRules.isEmpty {
+                let defaultYAML = ConfigManager.shared.defaultConfig()
+                if subscriptionProxyGroups.isEmpty {
+                    proxyGroups = ConfigManager.shared.parseProxyGroups(from: defaultYAML)
+                    configText = ConfigManager.shared.updateProxyGroups(proxyGroups, in: configText)
+                }
+                if subscriptionRules.isEmpty {
+                    rules = ConfigManager.shared.parseRules(from: defaultYAML)
+                    configText = ConfigManager.shared.updateRules(rules, in: configText)
+                }
+                try? ConfigManager.shared.saveConfig(configText)
+            }
         }
     }
 

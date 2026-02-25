@@ -15,6 +15,7 @@
 
 import SwiftUI
 import NetworkExtension
+import os
 
 struct HomeView: View {
     @EnvironmentObject var vpnManager: VPNManager
@@ -86,7 +87,9 @@ struct HomeView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
-            .sheet(isPresented: $showAddSubscription) {
+            .sheet(isPresented: $showAddSubscription, onDismiss: {
+                fetchNewSubscriptions()
+            }) {
                 AddSubscriptionView(subscriptions: $subscriptions)
             }
             .sheet(item: $editingSubscription) { sub in
@@ -297,34 +300,59 @@ struct HomeView: View {
     }
 
     private func loadSubscriptions() {
-        let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
-        guard let data = defaults?.data(forKey: "subscriptions"),
-              let subs = try? JSONDecoder().decode([Subscription].self, from: data) else {
-            return
-        }
-        subscriptions = subs
-        // Re-parse nodes for subscriptions that have raw content but empty nodes
-        var needsSave = false
-        for i in subscriptions.indices {
-            if subscriptions[i].nodes.isEmpty, let raw = subscriptions[i].rawContent, !raw.isEmpty {
-                subscriptions[i].nodes = SubscriptionParser.parse(raw)
-                if !subscriptions[i].nodes.isEmpty { needsSave = true }
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                () -> (subs: [Subscription], selectedNode: String?, selectedID: UUID?)? in
+                let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
+                guard let data = defaults?.data(forKey: "subscriptions"),
+                      var subs = try? JSONDecoder().decode([Subscription].self, from: data) else {
+                    return nil
+                }
+                // Re-parse nodes for subscriptions that have raw content but empty nodes
+                var needsSave = false
+                for i in subs.indices {
+                    if subs[i].nodes.isEmpty, let raw = subs[i].rawContent, !raw.isEmpty {
+                        subs[i].nodes = SubscriptionParser.parse(raw)
+                        if !subs[i].nodes.isEmpty { needsSave = true }
+                    }
+                }
+                if needsSave, let saveData = try? JSONEncoder().encode(subs) {
+                    defaults?.set(saveData, forKey: "subscriptions")
+                }
+                let selectedNode = defaults?.string(forKey: "selectedNode")
+                let selectedID: UUID?
+                if let idStr = defaults?.string(forKey: "selectedSubscriptionID"),
+                   let id = UUID(uuidString: idStr),
+                   subs.contains(where: { $0.id == id }) {
+                    selectedID = id
+                } else {
+                    selectedID = nil
+                }
+                return (subs, selectedNode, selectedID)
+            }.value
+
+            guard let result else { return }
+            subscriptions = result.subs
+            selectedNode = result.selectedNode
+            if let id = result.selectedID {
+                selectedSubscriptionID = id
+                expandedSubscriptionIDs.insert(id)
+                // Apply cached subscription config to config.yaml on launch
+                if let sub = result.subs.first(where: { $0.id == id }),
+                   let raw = sub.rawContent {
+                    try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: result.selectedNode)
+                }
             }
-        }
-        if needsSave { saveSubscriptions() }
-        selectedNode = defaults?.string(forKey: "selectedNode")
-        if let idString = defaults?.string(forKey: "selectedSubscriptionID"),
-           let id = UUID(uuidString: idString),
-           subs.contains(where: { $0.id == id }) {
-            selectedSubscriptionID = id
-            expandedSubscriptionIDs.insert(id)
         }
     }
 
     private func saveSubscriptions() {
-        guard let data = try? JSONEncoder().encode(subscriptions) else { return }
-        UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
-            .set(data, forKey: "subscriptions")
+        let snapshot = subscriptions
+        Task.detached(priority: .background) {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
+                .set(data, forKey: "subscriptions")
+        }
     }
 
     private func saveSelectedNode(_ name: String) {
@@ -337,6 +365,39 @@ struct HomeView: View {
               let sub = subscriptions.first(where: { $0.id == selectedID }),
               let raw = sub.rawContent else { return }
         try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: selectedNode)
+    }
+
+    private func fetchNewSubscriptions() {
+        for sub in subscriptions where sub.rawContent == nil && sub.nodes.isEmpty {
+            let id = sub.id
+            let url = sub.url
+            let name = sub.name
+            Task {
+                let wasConnected = await vpnManager.disconnectForFetch()
+                defer { if wasConnected { vpnManager.start() } }
+                do {
+                    let result = try await fetchSubscription(from: url)
+                    await ConfigManager.shared.downloadGeoDataIfNeeded()
+                    if let validationError = ConfigManager.shared.validateSubscriptionConfig(result.raw) {
+                        displayToast("Invalid: \(validationError)")
+                        AppLogger.ui.error("Validation failed for \(name, privacy: .public): \(validationError, privacy: .public)")
+                        ConfigManager.shared.dumpDebugMergedConfig(result.raw, error: validationError)
+                        return
+                    }
+                    if let i = subscriptions.firstIndex(where: { $0.id == id }) {
+                        subscriptions[i].nodes = result.nodes
+                        subscriptions[i].rawContent = result.raw
+                    }
+                    saveSubscriptions()
+                    if let i = subscriptions.firstIndex(where: { $0.id == id }) {
+                        selectSubscription(subscriptions[i])
+                    }
+                    displayToast("Fetched \(name)")
+                } catch {
+                    displayToast("Failed to fetch \(name)")
+                }
+            }
+        }
     }
 
     private func deleteSubscription(at offsets: IndexSet) {
@@ -355,24 +416,38 @@ struct HomeView: View {
         let name = sub.name
         sub.isUpdating = true
         Task {
+            let wasConnected = await vpnManager.disconnectForFetch()
+            defer { if wasConnected { vpnManager.start() } }
+            debugLog("=== refreshSubscription start: '\(name)' url=\(url)")
             do {
                 let result = try await fetchSubscription(from: url)
+                debugLog("fetched '\(name)': \(result.nodes.count) nodes, \(result.raw.count) raw bytes")
+                debugLog("raw preview (first 500): \(String(result.raw.prefix(500)))")
+                await ConfigManager.shared.downloadGeoDataIfNeeded()
+                debugLog("geo data check done, starting validation...")
                 if let validationError = ConfigManager.shared.validateSubscriptionConfig(result.raw) {
                     if let i = subscriptions.firstIndex(where: { $0.id == id }) {
                         subscriptions[i].isUpdating = false
                     }
-                    displayToast("Invalid config from \(name)")
-                    NSLog("[HomeView] Validation failed for \(name): \(validationError)")
+                    debugLog("VALIDATION FAILED: \(validationError)")
+                    displayToast("Invalid: \(validationError)")
+                    ConfigManager.shared.dumpDebugMergedConfig(result.raw, error: validationError)
                     return
                 }
+                debugLog("validation passed")
                 if let i = subscriptions.firstIndex(where: { $0.id == id }) {
                     subscriptions[i].nodes = result.nodes
                     subscriptions[i].rawContent = result.raw
                     subscriptions[i].isUpdating = false
                 }
                 saveSubscriptions()
-                displayToast("Updated \(name)")
+                // Apply to config.yaml if this is the selected subscription
+                if id == selectedSubscriptionID {
+                    try? ConfigManager.shared.applySubscriptionConfig(result.raw, selectedNode: selectedNode)
+                }
+                displayToast("Updated \(name) (\(result.nodes.count) nodes)")
             } catch {
+                debugLog("ERROR: \(error.localizedDescription)")
                 if let i = subscriptions.firstIndex(where: { $0.id == id }) {
                     subscriptions[i].isUpdating = false
                 }
@@ -381,9 +456,32 @@ struct HomeView: View {
         }
     }
 
+    /// Append debug info to shared container debug_log.txt
+    private func debugLog(_ message: String) {
+        AppLogger.ui.debug("\(message, privacy: .public)")
+        guard let dir = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
+        ) else { return }
+        let logURL = dir.appendingPathComponent("debug_log.txt")
+        let line = "[\(Date())] \(message)\n"
+        if let data = line.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: logURL.path),
+               let handle = try? FileHandle(forWritingTo: logURL) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try? handle.close()
+            } else {
+                try? data.write(to: logURL)
+            }
+        }
+    }
+
     private func reloadAllSubscriptions() async {
         guard !subscriptions.isEmpty else { return }
         isReloading = true
+        let wasConnected = await vpnManager.disconnectForFetch()
+        defer { if wasConnected { vpnManager.start() } }
+        await ConfigManager.shared.downloadGeoDataIfNeeded()
         var succeeded: [String] = []
         var failed: [(String, String)] = []
 
@@ -415,7 +513,12 @@ struct HomeView: View {
         }
 
         saveSubscriptions()
-        await ConfigManager.shared.downloadGeoDataIfNeeded()
+        // Apply the selected subscription's updated config to config.yaml
+        if let selID = selectedSubscriptionID,
+           let sub = subscriptions.first(where: { $0.id == selID }),
+           let raw = sub.rawContent {
+            try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: selectedNode)
+        }
         isReloading = false
         reloadResult = ReloadResult(succeeded: succeeded, failed: failed)
     }
@@ -425,12 +528,17 @@ struct HomeView: View {
             throw URLError(.badURL)
         }
         var request = URLRequest(url: url)
-        request.setValue("ClashforWindows/0.20.39", forHTTPHeaderField: "User-Agent")
-        let (data, _) = try await URLSession.shared.data(for: request)
+        request.setValue("ClashMetaForAndroid/2.11.1.Meta", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        AppLogger.log(AppLogger.network, category: "network", "fetchSubscription URL=\(urlString) status=\((response as? HTTPURLResponse)?.statusCode ?? -1) bytes=\(data.count)")
         guard let text = String(data: data, encoding: .utf8) else {
+            AppLogger.log(AppLogger.network, category: "network", "ERROR: fetchSubscription cannot decode as UTF-8")
             throw URLError(.cannotDecodeContentData)
         }
-        return (SubscriptionParser.parse(text), text)
+        AppLogger.log(AppLogger.network, category: "network", "fetchSubscription raw preview (first 500 chars): \(String(text.prefix(500)))")
+        let nodes = SubscriptionParser.parse(text)
+        AppLogger.log(AppLogger.network, category: "network", "fetchSubscription parsed \(nodes.count) nodes")
+        return (nodes, text)
     }
 }
 
@@ -576,7 +684,9 @@ struct AddSubscriptionView: View {
     private func addSubscription() {
         let sub = Subscription(name: name, url: url, nodes: [])
         subscriptions.append(sub)
-        if let data = try? JSONEncoder().encode(subscriptions) {
+        let snapshot = subscriptions
+        Task.detached(priority: .background) {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
             UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
                 .set(data, forKey: "subscriptions")
         }
@@ -607,20 +717,28 @@ struct ReloadResult: Identifiable {
 
 enum SubscriptionParser {
     static func parse(_ text: String) -> [ProxyNode] {
-        let lines = text.components(separatedBy: "\n")
+        // Normalize CRLF / bare CR to LF so trailing \r doesn't break value parsing
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
         var nodes: [ProxyNode] = []
         var inProxies = false
         var current: [String: String] = [:]
 
-        for line in lines {
+        AppLogger.log(AppLogger.parser, category: "parser", "total lines: \(lines.count), text length: \(text.count)")
+
+        for (lineNum, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
             if line.hasPrefix("proxies:") {
                 inProxies = true
+                AppLogger.log(AppLogger.parser, category: "parser", "found 'proxies:' at line \(lineNum)")
                 continue
             }
             // Top-level key ends the proxies section
             if inProxies, !line.hasPrefix(" "), !line.isEmpty, line.contains(":") {
+                AppLogger.log(AppLogger.parser, category: "parser", "proxies section ended at line \(lineNum): '\(String(line.prefix(80)))'")
                 if let node = makeNode(from: current) { nodes.append(node) }
                 current = [:]
                 inProxies = false
@@ -629,11 +747,9 @@ enum SubscriptionParser {
             guard inProxies else { continue }
 
             if trimmed == "-" {
-                // Dash alone on its line — start of a new block item
                 if let node = makeNode(from: current) { nodes.append(node) }
                 current = [:]
             } else if trimmed.hasPrefix("- {") && trimmed.hasSuffix("}") {
-                // Flow mapping: - {name: node1, type: ss, server: 1.2.3.4, port: 443}
                 if let node = makeNode(from: current) { nodes.append(node) }
                 current = [:]
                 let inner = String(trimmed.dropFirst(3).dropLast())
@@ -641,7 +757,6 @@ enum SubscriptionParser {
                     parseKV(pair, into: &current)
                 }
             } else if trimmed.hasPrefix("- ") {
-                // Block mapping start: "- name: value"
                 if let node = makeNode(from: current) { nodes.append(node) }
                 current = [:]
                 parseKV(String(trimmed.dropFirst(2)), into: &current)
@@ -650,6 +765,26 @@ enum SubscriptionParser {
             }
         }
         if let node = makeNode(from: current) { nodes.append(node) }
+        AppLogger.log(AppLogger.parser, category: "parser", "result: \(nodes.count) nodes parsed")
+        if nodes.isEmpty {
+            // Dump first few proxies-section lines for debugging
+            var proxiesStart = -1
+            for (i, l) in lines.enumerated() {
+                if l.hasPrefix("proxies:") { proxiesStart = i; break }
+            }
+            if proxiesStart >= 0 {
+                let end = min(proxiesStart + 10, lines.count)
+                for i in proxiesStart..<end {
+                    AppLogger.log(AppLogger.parser, category: "parser", "line \(i): '\(lines[i])'")
+                }
+            } else {
+                AppLogger.log(AppLogger.parser, category: "parser", "WARNING: no 'proxies:' section found in text")
+                // Log first 10 lines to see what we got
+                for i in 0..<min(10, lines.count) {
+                    AppLogger.log(AppLogger.parser, category: "parser", "line \(i): '\(lines[i])'")
+                }
+            }
+        }
         return nodes
     }
 
@@ -691,11 +826,27 @@ enum SubscriptionParser {
     }
 
     private static func makeNode(from dict: [String: String]) -> ProxyNode? {
-        guard let name = dict["name"],
-              let type_ = dict["type"],
-              let server = dict["server"],
-              let portStr = dict["port"],
-              let port = Int(portStr) else { return nil }
+        guard !dict.isEmpty else { return nil }
+        guard let name = dict["name"] else {
+            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: missing 'name', keys=\(dict.keys.sorted().joined(separator: ","))")
+            return nil
+        }
+        guard let type_ = dict["type"] else {
+            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: missing 'type' for '\(name)'")
+            return nil
+        }
+        guard let server = dict["server"] else {
+            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: missing 'server' for '\(name)'")
+            return nil
+        }
+        guard let portStr = dict["port"] else {
+            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: missing 'port' for '\(name)'")
+            return nil
+        }
+        guard let port = Int(portStr) else {
+            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: invalid port '\(portStr)' for '\(name)'")
+            return nil
+        }
         return ProxyNode(name: name, type: type_, server: server, port: port)
     }
 }
