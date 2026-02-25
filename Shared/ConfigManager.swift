@@ -301,6 +301,12 @@ final class ConfigManager {
 
     /// Merge subscription YAML: take proxies, proxy-groups, rules, and their providers from subscription.
     private func mergeSubscription(_ yaml: String, selectedNode: String? = nil) -> String {
+        let base = (try? loadConfig()) ?? defaultConfig()
+        return ConfigManager.mergeSubscription(yaml, selectedNode: selectedNode, baseConfig: base, defaultConfig: defaultConfig())
+    }
+
+    /// Pure merge logic — takes all inputs as parameters for testability.
+    static func mergeSubscription(_ yaml: String, selectedNode: String? = nil, baseConfig: String, defaultConfig: String) -> String {
         let wantedSections = ["proxies", "proxy-groups", "proxy-providers", "rules", "rule-providers"]
         var extracted: [String: String] = [:]
         var currentKey: String? = nil
@@ -312,18 +318,11 @@ final class ConfigManager {
         }
 
         // Normalize line endings: CRLF (\r\n) or bare CR (\r) → LF (\n).
-        // Without this, blank lines in CRLF YAMLs become "\r" after splitting on "\n".
-        // "\r" is non-empty and has no leading whitespace, so it passes the isTopLevel
-        // check, triggering flush() mid-section and cutting off everything after the
-        // first blank line inside proxy-groups or rules.
         let normalized = yaml
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
 
         for line in normalized.components(separatedBy: "\n") {
-            // A section header never starts with "-" (list item) or "#" (comment).
-            // Some providers emit list items at column 0 (no indentation), so we must
-            // exclude them here or every "- name: ..." line would flush the current section.
             let isTopLevel = !line.hasPrefix(" ") && !line.hasPrefix("\t")
                 && !line.isEmpty && !line.hasPrefix("-") && !line.hasPrefix("#")
             if isTopLevel {
@@ -338,29 +337,26 @@ final class ConfigManager {
         }
         flush()
 
-        // Log which sections were found to aid debugging.
-        AppLogger.config.debug("mergeSubscription extracted: \(wantedSections.map { k in extracted[k].map { "\(k)(\($0.count)ch)" } ?? "\(k):MISSING" }.joined(separator: ", "), privacy: .public)")
-
-        // Split local config into header (up to proxies:) and rules (from rules: onward)
-        // Use the current on-disk config so user edits are preserved; fall back to default
-        let base = (try? loadConfig()) ?? defaultConfig()
-        let baseLines = base.components(separatedBy: "\n")
-        let proxiesCut = baseLines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("proxies:") }) ?? baseLines.count
-        let rulesCut = baseLines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("rules:") }) ?? baseLines.count
-
+        // Header comes from base config (preserves user edits to ports, DNS, etc.);
+        // default rules always come from defaultConfig so they can never be lost.
+        // IMPORTANT: Only match top-level (non-indented) YAML keys to avoid matching
+        // "proxies:" or "rules:" nested inside proxy-group definitions.
+        let baseLines = baseConfig.components(separatedBy: "\n")
+        let proxiesCut = baseLines.firstIndex(where: { !$0.hasPrefix(" ") && !$0.hasPrefix("\t") && $0.hasPrefix("proxies:") }) ?? baseLines.count
         let header = baseLines[0..<proxiesCut].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        let rulesSection = baseLines[rulesCut...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let defaultLines = defaultConfig.components(separatedBy: "\n")
+        let defaultRulesCut = defaultLines.firstIndex(where: { !$0.hasPrefix(" ") && !$0.hasPrefix("\t") && $0.hasPrefix("rules:") }) ?? defaultLines.count
+        let defaultRulesSection = defaultLines[defaultRulesCut...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
 
         var result = header
         result += "\n\n" + (extracted["proxies"] ?? "proxies: []")
 
         // Find the first usable proxy group name from subscription.
-        // Group entries look like "  - name: Foo" so trimmed gives "- name: Foo".
         var firstGroupName: String?
         if let pgYAML = extracted["proxy-groups"] {
             for line in pgYAML.components(separatedBy: "\n") {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
-                // Match both "- name: Foo" (list item) and "name: Foo" (edge case)
                 let nameValue: String?
                 if trimmed.hasPrefix("- name:") {
                     nameValue = String(trimmed.dropFirst(7)).trimmingCharacters(in: .whitespaces)
@@ -379,8 +375,6 @@ final class ConfigManager {
         }
 
         // Inject a PROXY selector so local rules referencing "PROXY" resolve correctly.
-        // When a specific node is selected, use only that node; otherwise fall back to
-        // the subscription's first group.
         var proxyGroupBlock = "proxy-groups:\n"
         proxyGroupBlock += "  - name: PROXY\n"
         proxyGroupBlock += "    type: select\n"
@@ -393,11 +387,43 @@ final class ConfigManager {
         proxyGroupBlock += "      - DIRECT"
         result += "\n\n" + proxyGroupBlock
 
-        // Append subscription's proxy-groups after the PROXY group
+        // Append subscription's proxy-groups after the PROXY group,
+        // replacing the first group's proxies with only the selected node.
         if let pgYAML = extracted["proxy-groups"] {
-            // Strip the "proxy-groups:" header and append the group entries
-            let pgLines = pgYAML.components(separatedBy: "\n")
-            let entries = pgLines.dropFirst().joined(separator: "\n")
+            var pgLines = Array(pgYAML.components(separatedBy: "\n").dropFirst())
+            if let node = selectedNode, !node.isEmpty {
+                var firstGroupFound = false
+                var inProxies = false
+                var removeStart = -1
+                var removeEnd = -1
+                for i in 0..<pgLines.count {
+                    let trimmed = pgLines[i].trimmingCharacters(in: .whitespaces)
+                    if trimmed.hasPrefix("- name:") {
+                        if firstGroupFound { if inProxies { removeEnd = i }; break }
+                        firstGroupFound = true
+                        continue
+                    }
+                    guard firstGroupFound else { continue }
+                    if !inProxies && trimmed.hasPrefix("proxies:") {
+                        inProxies = true
+                        removeStart = i
+                        if trimmed != "proxies:" { continue }
+                        continue
+                    }
+                    if inProxies {
+                        if !trimmed.hasPrefix("- ") || trimmed.hasPrefix("- name:") {
+                            removeEnd = i; break
+                        }
+                    }
+                }
+                if removeStart >= 0 {
+                    if removeEnd < 0 { removeEnd = pgLines.count }
+                    pgLines.replaceSubrange(removeStart..<removeEnd, with: [
+                        "    proxies:", "      - \(node)",
+                    ])
+                }
+            }
+            let entries = pgLines.joined(separator: "\n")
             if !entries.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 result += "\n" + entries
             }
@@ -411,11 +437,11 @@ final class ConfigManager {
             result += "\n\n" + ruleProviders
         }
 
-        // Use subscription rules if available, otherwise keep local rules
+        // Use subscription rules if available, otherwise always use default rules.
         if let subRules = extracted["rules"] {
             result += "\n\n" + subRules
         } else {
-            result += "\n\n" + rulesSection
+            result += "\n\n" + defaultRulesSection
         }
 
         return result
@@ -631,7 +657,11 @@ extension ConfigManager {
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            if !line.hasPrefix(" ") && !line.hasPrefix("\t") && !line.isEmpty {
+            // Detect top-level YAML keys. Lines starting with "- " are list items
+            // (e.g. non-indented rules from subscriptions), not section headers.
+            let isTopLevel = !line.hasPrefix(" ") && !line.hasPrefix("\t")
+                && !line.isEmpty && !line.hasPrefix("-") && !line.hasPrefix("#")
+            if isTopLevel {
                 if trimmed.hasPrefix("rules:") {
                     inRules = true
                     if trimmed == "rules: []" { return [] }

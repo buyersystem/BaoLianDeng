@@ -105,6 +105,12 @@ struct ConfigEditorView: View {
                 loadConfig()
                 loadSelectedSubscription()
             }
+            .onChange(of: source) { _, newSource in
+                if case .subscription = newSource {
+                    loadConfig()
+                    loadSelectedSubscription()
+                }
+            }
         }
     }
 
@@ -328,21 +334,14 @@ struct ConfigEditorView: View {
         if subscriptionText.isEmpty {
             source = .local
         } else {
-            subscriptionProxyGroups = ConfigManager.shared.parseProxyGroups(from: subscriptionText)
-            subscriptionRules = ConfigManager.shared.parseRules(from: subscriptionText)
-            // If remote config has no proxy groups or rules, reset local config to defaults
-            if subscriptionProxyGroups.isEmpty || subscriptionRules.isEmpty {
-                let defaultYAML = ConfigManager.shared.defaultConfig()
-                if subscriptionProxyGroups.isEmpty {
-                    proxyGroups = ConfigManager.shared.parseProxyGroups(from: defaultYAML)
-                    configText = ConfigManager.shared.updateProxyGroups(proxyGroups, in: configText)
-                }
-                if subscriptionRules.isEmpty {
-                    rules = ConfigManager.shared.parseRules(from: defaultYAML)
-                    configText = ConfigManager.shared.updateRules(rules, in: configText)
-                }
-                try? ConfigManager.shared.saveConfig(configText)
-            }
+            // Re-apply the subscription merge to ensure config.yaml has the correct
+            // proxy groups (with selected node) and default rules as fallback.
+            try? ConfigManager.shared.applySubscriptionConfig(subscriptionText)
+            configText = (try? ConfigManager.shared.loadConfig()) ?? ConfigManager.shared.defaultConfig()
+            proxyGroups = ConfigManager.shared.parseProxyGroups(from: configText)
+            rules = ConfigManager.shared.parseRules(from: configText)
+            subscriptionProxyGroups = proxyGroups
+            subscriptionRules = rules
         }
     }
 

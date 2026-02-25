@@ -32,6 +32,7 @@
 		A10080 /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10080; };
 		A10090 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090; };
 		A10091 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090; };
+		AA0001 /* ConfigMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0002; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +44,13 @@
 			remoteInfo = PacketTunnel;
 		};
 		D10003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E10001;
+			proxyType = 1;
+			remoteGlobalIDString = C10001T;
+			remoteInfo = BaoLianDeng;
+		};
+		AA0012 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = E10001;
 			proxyType = 1;
@@ -119,6 +127,8 @@
 		B10060 /* TrafficStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficStore.swift; sourceTree = "<group>"; };
 		B10080 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
 		B10090 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
+		AA0002 /* ConfigMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigMergeTests.swift; sourceTree = "<group>"; };
+		AA0003 /* BaoLianDengTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BaoLianDengTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10001 /* BaoLianDeng.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BaoLianDeng.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C20001 /* PacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C30001 /* BaoLianDengUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BaoLianDengUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -150,6 +160,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -160,6 +177,7 @@
 				G10002,
 				G10003,
 				G10004,
+				AA0004,
 				G10010,
 				G10005,
 				G10006,
@@ -223,8 +241,17 @@
 				C10001,
 				C20001,
 				C30001,
+				AA0003,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		AA0004 /* BaoLianDengTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0002,
+			);
+			path = BaoLianDengTests;
 			sourceTree = "<group>";
 		};
 		G10010 /* BaoLianDengUITests */ = {
@@ -316,6 +343,24 @@
 			productReference = C30001;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		AA0005 /* BaoLianDengTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0011;
+			buildPhases = (
+				AA0006,
+				AA0007,
+				AA0008,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0013,
+			);
+			name = BaoLianDengTests;
+			productName = BaoLianDengTests;
+			productReference = AA0003;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -333,6 +378,10 @@
 						CreatedOnToolsVersion = 15.4;
 					};
 					C10003 = {
+						CreatedOnToolsVersion = 15.4;
+						TestTargetID = C10001T;
+					};
+					AA0005 = {
 						CreatedOnToolsVersion = 15.4;
 						TestTargetID = C10001T;
 					};
@@ -354,6 +403,7 @@
 				C10001T,
 				C10002,
 				C10003,
+				AA0005,
 			);
 		};
 /* End PBXProject section */
@@ -375,6 +425,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		R10003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0008 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -423,6 +480,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0001,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -435,6 +500,11 @@
 			isa = PBXTargetDependency;
 			target = C10001T;
 			targetProxy = D10003;
+		};
+		AA0013 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C10001T;
+			targetProxy = AA0012;
 		};
 /* End PBXTargetDependency section */
 
@@ -652,6 +722,42 @@
 			};
 			name = Release;
 		};
+		/* Debug - UnitTests Target */
+		AA0009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng.UnitTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BaoLianDeng.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/BaoLianDeng";
+			};
+			name = Debug;
+		};
+		/* Release - UnitTests Target */
+		AA0010 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng.UnitTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BaoLianDeng.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/BaoLianDeng";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -687,6 +793,15 @@
 			buildConfigurations = (
 				Y10007,
 				Y10008,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0011 /* Build configuration list for PBXNativeTarget "BaoLianDengTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0009,
+				AA0010,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
