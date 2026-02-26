@@ -257,7 +257,18 @@ struct HomeView: View {
                             onSelect: {
                                 selectedNode = node.name
                                 saveSelectedNode(node.name)
-                                reapplyConfigForSelectedNode()
+                                // Also select this node's subscription if not already selected
+                                if selectedSubscriptionID != sub.id {
+                                    selectedSubscriptionID = sub.id
+                                    UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
+                                        .set(sub.id.uuidString, forKey: "selectedSubscriptionID")
+                                }
+                                if let raw = sub.rawContent {
+                                    let nodeName = node.name
+                                    Task.detached {
+                                        try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: nodeName)
+                                    }
+                                }
                             }
                         )
                     }
@@ -294,8 +305,11 @@ struct HomeView: View {
         }
         // Apply the subscription YAML to config.yaml so the VPN uses it
         if let raw = sub.rawContent {
-            try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: selectedNode)
-            Task { await ConfigManager.shared.downloadGeoDataIfNeeded() }
+            let node = selectedNode
+            Task.detached {
+                try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: node)
+                await ConfigManager.shared.downloadGeoDataIfNeeded()
+            }
         }
     }
 
@@ -364,7 +378,10 @@ struct HomeView: View {
         guard let selectedID = selectedSubscriptionID,
               let sub = subscriptions.first(where: { $0.id == selectedID }),
               let raw = sub.rawContent else { return }
-        try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: selectedNode)
+        let node = selectedNode
+        Task.detached {
+            try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: node)
+        }
     }
 
     private func fetchNewSubscriptions() {
@@ -580,6 +597,8 @@ struct NodeRow: View {
                         .foregroundStyle(.blue)
                 }
             }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
