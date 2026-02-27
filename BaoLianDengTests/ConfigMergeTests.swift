@@ -128,12 +128,13 @@ final class ConfigMergeTests: XCTestCase {
         )
 
         let groups = ConfigManager.shared.parseProxyGroups(from: result)
-        // First group should be PROXY with the selected node
+        // First group should be PROXY with only the selected node (exclusive selection)
         XCTAssertGreaterThanOrEqual(groups.count, 1, "Must have at least one proxy group")
         let proxyGroup = groups.first!
         XCTAssertEqual(proxyGroup.name, "PROXY")
         XCTAssertTrue(proxyGroup.proxies.contains("HK-Node"), "PROXY group must contain selected node HK-Node")
-        XCTAssertTrue(proxyGroup.proxies.contains("DIRECT"), "PROXY group must contain DIRECT")
+        XCTAssertEqual(proxyGroup.proxies.count, 1, "PROXY group must contain only the selected node")
+        XCTAssertFalse(proxyGroup.proxies.contains("DIRECT"), "PROXY group must not contain DIRECT when a node is selected")
     }
 
     func testMergeWithCorruptedBaseConfig() {
@@ -261,6 +262,59 @@ final class ConfigMergeTests: XCTestCase {
 
         let rules = ConfigManager.shared.parseRules(from: result)
         XCTAssertGreaterThan(rules.count, 0, "Merge with real defaultConfig must produce rules, got 0. Result tail: \(String(result.suffix(300)))")
+    }
+
+    func testMergeExclusiveNodeSelection() {
+        // When a node is selected, it should be the ONLY proxy in the default proxy group.
+        // No DIRECT fallback — rules handle direct traffic explicitly.
+        let subscriptionMultiNode = """
+            port: 7890
+            proxies:
+              - name: HK-Node
+                type: ss
+                server: 1.2.3.4
+                port: 443
+                cipher: aes-256-gcm
+                password: test123
+              - name: JP-Node
+                type: ss
+                server: 5.6.7.8
+                port: 443
+                cipher: aes-256-gcm
+                password: test456
+              - name: US-Node
+                type: ss
+                server: 9.10.11.12
+                port: 443
+                cipher: aes-256-gcm
+                password: test789
+            proxy-groups:
+              - name: AutoSelect
+                type: url-test
+                proxies:
+                  - HK-Node
+                  - JP-Node
+                  - US-Node
+                url: http://www.gstatic.com/generate_204
+                interval: 300
+            """
+
+        let result = ConfigManager.mergeSubscription(
+            subscriptionMultiNode,
+            selectedNode: "JP-Node",
+            baseConfig: defaultConfig,
+            defaultConfig: defaultConfig
+        )
+
+        let groups = ConfigManager.shared.parseProxyGroups(from: result)
+
+        // The PROXY group (default, used by MATCH rule) must contain only the selected node
+        let proxyGroup = groups.first(where: { $0.name == "PROXY" })!
+        XCTAssertEqual(proxyGroup.proxies, ["JP-Node"], "PROXY group must exclusively contain the selected node")
+
+        // The first subscription group should also have only the selected node
+        let autoSelect = groups.first(where: { $0.name == "AutoSelect" })!
+        XCTAssertEqual(autoSelect.proxies, ["JP-Node"], "First subscription group must contain only the selected node")
     }
 
     func testParseNonIndentedRules() {

@@ -144,8 +144,9 @@ final class ConfigManager {
         ]
         if let node = selectedNode, !node.isEmpty {
             globalGroup.append("      - \(node)")
+        } else {
+            globalGroup.append("      - DIRECT")
         }
-        globalGroup.append("      - DIRECT")
 
         lines.insert(contentsOf: globalGroup, at: pgIdx + 1)
         return lines.joined(separator: "\n")
@@ -375,16 +376,20 @@ final class ConfigManager {
         }
 
         // Inject a PROXY selector so local rules referencing "PROXY" resolve correctly.
+        // When a node is selected, it is the exclusive proxy in this group (no DIRECT fallback)
+        // so that all traffic routed through the default group goes through the selected node.
         var proxyGroupBlock = "proxy-groups:\n"
         proxyGroupBlock += "  - name: PROXY\n"
         proxyGroupBlock += "    type: select\n"
         proxyGroupBlock += "    proxies:\n"
         if let node = selectedNode, !node.isEmpty {
-            proxyGroupBlock += "      - \(node)\n"
+            proxyGroupBlock += "      - \(node)"
         } else if let name = firstGroupName {
             proxyGroupBlock += "      - \(name)\n"
+            proxyGroupBlock += "      - DIRECT"
+        } else {
+            proxyGroupBlock += "      - DIRECT"
         }
-        proxyGroupBlock += "      - DIRECT"
         result += "\n\n" + proxyGroupBlock
 
         // Append subscription's proxy-groups after the PROXY group,
