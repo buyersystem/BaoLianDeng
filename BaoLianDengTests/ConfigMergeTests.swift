@@ -1,4 +1,5 @@
 import XCTest
+import Yams
 @testable import BaoLianDeng
 
 final class ConfigMergeTests: XCTestCase {
@@ -78,7 +79,6 @@ final class ConfigMergeTests: XCTestCase {
     func testMergeWithNoRulesUsesDefaultRules() {
         let result = ConfigManager.mergeSubscription(
             subscriptionNoRules,
-            selectedNode: "HK-Node",
             baseConfig: defaultConfig,
             defaultConfig: defaultConfig
         )
@@ -102,7 +102,6 @@ final class ConfigMergeTests: XCTestCase {
     func testMergeWithRulesUsesSubscriptionRules() {
         let result = ConfigManager.mergeSubscription(
             subscriptionWithRules,
-            selectedNode: "US-Node",
             baseConfig: defaultConfig,
             defaultConfig: defaultConfig
         )
@@ -119,22 +118,20 @@ final class ConfigMergeTests: XCTestCase {
         XCTAssertEqual(rules.count, 3, "Should have 3 subscription rules")
     }
 
-    func testMergeProxyGroupHasSelectedNode() {
+    func testMergeProxyGroupContainsAllNodes() {
         let result = ConfigManager.mergeSubscription(
             subscriptionNoRules,
-            selectedNode: "HK-Node",
             baseConfig: defaultConfig,
             defaultConfig: defaultConfig
         )
 
         let groups = ConfigManager.shared.parseProxyGroups(from: result)
-        // First group should be PROXY with only the selected node (exclusive selection)
+        // First group should be PROXY with all proxy nodes + DIRECT
         XCTAssertGreaterThanOrEqual(groups.count, 1, "Must have at least one proxy group")
         let proxyGroup = groups.first!
         XCTAssertEqual(proxyGroup.name, "PROXY")
-        XCTAssertTrue(proxyGroup.proxies.contains("HK-Node"), "PROXY group must contain selected node HK-Node")
-        XCTAssertEqual(proxyGroup.proxies.count, 1, "PROXY group must contain only the selected node")
-        XCTAssertFalse(proxyGroup.proxies.contains("DIRECT"), "PROXY group must not contain DIRECT when a node is selected")
+        XCTAssertTrue(proxyGroup.proxies.contains("HK-Node"), "PROXY group must contain HK-Node")
+        XCTAssertTrue(proxyGroup.proxies.contains("DIRECT"), "PROXY group must contain DIRECT fallback")
     }
 
     func testMergeWithCorruptedBaseConfig() {
@@ -156,7 +153,6 @@ final class ConfigMergeTests: XCTestCase {
 
         let result = ConfigManager.mergeSubscription(
             subscriptionNoRules,
-            selectedNode: "HK-Node",
             baseConfig: corruptedBase,
             defaultConfig: defaultConfig
         )
@@ -188,7 +184,6 @@ final class ConfigMergeTests: XCTestCase {
 
         let result = ConfigManager.mergeSubscription(
             subscriptionNoRules,
-            selectedNode: "HK-Node",
             baseConfig: customBase,
             defaultConfig: defaultConfig
         )
@@ -198,28 +193,11 @@ final class ConfigMergeTests: XCTestCase {
         XCTAssertTrue(result.contains("mode: global"), "Must preserve custom mode from base")
     }
 
-    func testMergeWithNoSelectedNodeUsesFirstGroup() {
-        let result = ConfigManager.mergeSubscription(
-            subscriptionNoRules,
-            selectedNode: nil,
-            baseConfig: defaultConfig,
-            defaultConfig: defaultConfig
-        )
-
-        let groups = ConfigManager.shared.parseProxyGroups(from: result)
-        let proxyGroup = groups.first!
-        XCTAssertEqual(proxyGroup.name, "PROXY")
-        // Should fall back to subscription's first group name
-        XCTAssertTrue(proxyGroup.proxies.contains("AutoSelect"), "PROXY group should contain subscription's first group name")
-        XCTAssertTrue(proxyGroup.proxies.contains("DIRECT"), "PROXY group must contain DIRECT")
-    }
-
     func testMergeWithCRLFLineEndings() {
         let crlfSubscription = subscriptionNoRules.replacingOccurrences(of: "\n", with: "\r\n")
 
         let result = ConfigManager.mergeSubscription(
             crlfSubscription,
-            selectedNode: "HK-Node",
             baseConfig: defaultConfig,
             defaultConfig: defaultConfig
         )
@@ -229,7 +207,7 @@ final class ConfigMergeTests: XCTestCase {
         XCTAssertEqual(rules.count, 5, "Should parse all default rules with CRLF input")
 
         let groups = ConfigManager.shared.parseProxyGroups(from: result)
-        XCTAssertTrue(groups.first?.proxies.contains("HK-Node") == true, "Must have selected node with CRLF input")
+        XCTAssertTrue(groups.first?.proxies.contains("HK-Node") == true, "Must have HK-Node with CRLF input")
     }
 
     func testDefaultConfigRulesAreParseable() {
@@ -255,7 +233,6 @@ final class ConfigMergeTests: XCTestCase {
         let realDefault = ConfigManager.shared.defaultConfig()
         let result = ConfigManager.mergeSubscription(
             subscriptionNoRules,
-            selectedNode: "HK-Node",
             baseConfig: realDefault,
             defaultConfig: realDefault
         )
@@ -264,9 +241,8 @@ final class ConfigMergeTests: XCTestCase {
         XCTAssertGreaterThan(rules.count, 0, "Merge with real defaultConfig must produce rules, got 0. Result tail: \(String(result.suffix(300)))")
     }
 
-    func testMergeExclusiveNodeSelection() {
-        // When a node is selected, it should be the ONLY proxy in the default proxy group.
-        // No DIRECT fallback — rules handle direct traffic explicitly.
+    func testMergeProxyGroupContainsAllMultipleNodes() {
+        // PROXY group should contain ALL proxy nodes so the REST API can select any.
         let subscriptionMultiNode = """
             port: 7890
             proxies:
@@ -301,20 +277,23 @@ final class ConfigMergeTests: XCTestCase {
 
         let result = ConfigManager.mergeSubscription(
             subscriptionMultiNode,
-            selectedNode: "JP-Node",
             baseConfig: defaultConfig,
             defaultConfig: defaultConfig
         )
 
         let groups = ConfigManager.shared.parseProxyGroups(from: result)
 
-        // The PROXY group (default, used by MATCH rule) must contain only the selected node
+        // The PROXY group must contain all proxy nodes + DIRECT
         let proxyGroup = groups.first(where: { $0.name == "PROXY" })!
-        XCTAssertEqual(proxyGroup.proxies, ["JP-Node"], "PROXY group must exclusively contain the selected node")
+        XCTAssertTrue(proxyGroup.proxies.contains("HK-Node"), "PROXY group must contain HK-Node")
+        XCTAssertTrue(proxyGroup.proxies.contains("JP-Node"), "PROXY group must contain JP-Node")
+        XCTAssertTrue(proxyGroup.proxies.contains("US-Node"), "PROXY group must contain US-Node")
+        XCTAssertTrue(proxyGroup.proxies.contains("DIRECT"), "PROXY group must contain DIRECT")
+        XCTAssertEqual(proxyGroup.proxies.count, 4, "PROXY group must have 3 nodes + DIRECT")
 
-        // The first subscription group should also have only the selected node
+        // The subscription group should keep all its original proxies
         let autoSelect = groups.first(where: { $0.name == "AutoSelect" })!
-        XCTAssertEqual(autoSelect.proxies, ["JP-Node"], "First subscription group must contain only the selected node")
+        XCTAssertEqual(autoSelect.proxies, ["HK-Node", "JP-Node", "US-Node"], "Subscription group must keep all original proxies")
     }
 
     func testParseNonIndentedRules() {
@@ -371,7 +350,6 @@ final class ConfigMergeTests: XCTestCase {
 
         let result = ConfigManager.mergeSubscription(
             subscriptionNonIndentedRules,
-            selectedNode: "JP-Node",
             baseConfig: defaultConfig,
             defaultConfig: defaultConfig
         )
@@ -380,5 +358,122 @@ final class ConfigMergeTests: XCTestCase {
         XCTAssertEqual(rules.count, 4, "Must parse non-indented subscription rules from merged config, got \(rules.count)")
         XCTAssertEqual(rules[0].value, "tracker.example.com")
         XCTAssertEqual(rules[0].target, "REJECT")
+    }
+
+    // MARK: - Standalone Dash Format
+
+    /// Subscription YAML where proxies and proxy-groups use standalone `-` on its own line
+    private let subscriptionStandaloneDash = """
+        port: 7890
+        proxies:
+          -
+            name: 'HK-Node'
+            type: trojan
+            server: 1.2.3.4
+            port: 443
+            password: test123
+          -
+            name: 'JP-Node'
+            type: trojan
+            server: 5.6.7.8
+            port: 443
+            password: test456
+        proxy-groups:
+          -
+            name: 'AutoSelect'
+            type: url-test
+            proxies:
+              - HK-Node
+              - JP-Node
+            url: http://www.gstatic.com/generate_204
+            interval: 300
+          -
+            name: 'Fallback'
+            type: select
+            proxies:
+              - AutoSelect
+              - DIRECT
+        rules:
+        - DOMAIN-SUFFIX,google.com,AutoSelect
+        - MATCH,Fallback
+        """
+
+    func testExtractProxyNamesStandaloneDash() {
+        let parsed = (try? Yams.load(yaml: subscriptionStandaloneDash)) as? [String: Any]
+        let proxies = parsed?["proxies"] as? [[String: Any]] ?? []
+        let names = ConfigManager.extractProxyNames(from: proxies)
+        XCTAssertEqual(names, ["HK-Node", "JP-Node"], "Must extract proxy names from standalone dash format")
+    }
+
+    func testParseProxyGroupsStandaloneDash() {
+        let result = ConfigManager.mergeSubscription(
+            subscriptionStandaloneDash,
+            baseConfig: defaultConfig,
+            defaultConfig: defaultConfig
+        )
+
+        let groups = ConfigManager.shared.parseProxyGroups(from: result)
+        // PROXY (injected) + AutoSelect + Fallback
+        XCTAssertEqual(groups.count, 3, "Must parse 3 groups (PROXY + 2 subscription groups), got \(groups.count)")
+
+        let proxyGroup = groups.first(where: { $0.name == "PROXY" })!
+        XCTAssertTrue(proxyGroup.proxies.contains("HK-Node"), "PROXY group must contain HK-Node")
+        XCTAssertTrue(proxyGroup.proxies.contains("JP-Node"), "PROXY group must contain JP-Node")
+
+        let autoSelect = groups.first(where: { $0.name == "AutoSelect" })
+        XCTAssertNotNil(autoSelect, "Must have AutoSelect group")
+        XCTAssertEqual(autoSelect?.type, "url-test")
+        XCTAssertEqual(autoSelect?.proxies, ["HK-Node", "JP-Node"])
+
+        let fallback = groups.first(where: { $0.name == "Fallback" })
+        XCTAssertNotNil(fallback, "Must have Fallback group")
+        XCTAssertEqual(fallback?.proxies, ["AutoSelect", "DIRECT"])
+    }
+
+    func testMergeStandaloneDashRules() {
+        let result = ConfigManager.mergeSubscription(
+            subscriptionStandaloneDash,
+            baseConfig: defaultConfig,
+            defaultConfig: defaultConfig
+        )
+
+        let rules = ConfigManager.shared.parseRules(from: result)
+        XCTAssertEqual(rules.count, 2)
+        XCTAssertEqual(rules[0].value, "google.com")
+        XCTAssertEqual(rules[0].target, "AutoSelect")
+        XCTAssertEqual(rules[1].type, "MATCH")
+        XCTAssertEqual(rules[1].target, "Fallback")
+    }
+
+    // MARK: - Flow Style Format
+
+    func testParseFlowStyleProxyGroups() {
+        // Yams handles flow-style mappings that broke the old line-by-line parser
+        let flowConfig = """
+            mixed-port: 7890
+            proxies:
+              - {name: Node1, type: ss, server: 1.2.3.4, port: 443, cipher: aes-256-gcm, password: test}
+            proxy-groups:
+              - {name: PROXY, type: select, proxies: [Node1, DIRECT]}
+              - {name: Auto, type: url-test, proxies: [Node1], url: "http://www.gstatic.com/generate_204", interval: 300}
+            rules:
+              - MATCH,PROXY
+            """
+
+        let groups = ConfigManager.shared.parseProxyGroups(from: flowConfig)
+        XCTAssertEqual(groups.count, 2, "Must parse flow-style proxy groups")
+        XCTAssertEqual(groups[0].name, "PROXY")
+        XCTAssertEqual(groups[0].type, "select")
+        XCTAssertEqual(groups[0].proxies, ["Node1", "DIRECT"])
+        XCTAssertEqual(groups[1].name, "Auto")
+        XCTAssertEqual(groups[1].type, "url-test")
+        XCTAssertEqual(groups[1].proxies, ["Node1"])
+        XCTAssertEqual(groups[1].url, "http://www.gstatic.com/generate_204")
+        XCTAssertEqual(groups[1].interval, 300)
+
+        let rules = ConfigManager.shared.parseRules(from: flowConfig)
+        XCTAssertEqual(rules.count, 1)
+        XCTAssertEqual(rules[0].type, "MATCH")
+        XCTAssertEqual(rules[0].target, "PROXY")
     }
 }

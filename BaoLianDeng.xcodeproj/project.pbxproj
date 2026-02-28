@@ -33,6 +33,9 @@
 		A10090 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090; };
 		A10091 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090; };
 		AA0001 /* ConfigMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0002; };
+		YMS0005 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = YMS0002 /* Yams */; };
+		YMS0006 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = YMS0003 /* Yams */; };
+		YMS0007 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = YMS0004 /* Yams */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -141,6 +144,7 @@
 			files = (
 				A10042,
 				A10030,
+				YMS0005 /* Yams in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -150,6 +154,7 @@
 			files = (
 				A10041,
 				A10031,
+				YMS0006 /* Yams in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -164,6 +169,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				YMS0007 /* Yams in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -304,6 +310,9 @@
 				D10002,
 			);
 			name = BaoLianDeng;
+			packageProductDependencies = (
+				YMS0002 /* Yams */,
+			);
 			productName = BaoLianDeng;
 			productReference = C10001;
 			productType = "com.apple.product-type.application";
@@ -321,6 +330,9 @@
 			dependencies = (
 			);
 			name = PacketTunnel;
+			packageProductDependencies = (
+				YMS0003 /* Yams */,
+			);
 			productName = PacketTunnel;
 			productReference = C20001;
 			productType = "com.apple.product-type.app-extension";
@@ -357,6 +369,9 @@
 				AA0013,
 			);
 			name = BaoLianDengTests;
+			packageProductDependencies = (
+				YMS0004 /* Yams */,
+			);
 			productName = BaoLianDengTests;
 			productReference = AA0003;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -396,6 +411,9 @@
 				Base,
 			);
 			mainGroup = G10001;
+			packageReferences = (
+				YMS0001 /* XCRemoteSwiftPackageReference "Yams" */,
+			);
 			productRefGroup = G10007;
 			projectDirPath = "";
 			projectRoot = "";
@@ -807,6 +825,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		YMS0001 /* XCRemoteSwiftPackageReference "Yams" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jpsim/Yams.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		YMS0002 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = YMS0001 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+		YMS0003 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = YMS0001 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+		YMS0004 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = YMS0001 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E10001;
 }

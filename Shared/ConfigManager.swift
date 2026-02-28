@@ -16,6 +16,7 @@
 import Foundation
 import MihomoCore
 import os
+import Yams
 
 final class ConfigManager {
     static let shared = ConfigManager()
@@ -93,6 +94,32 @@ final class ConfigManager {
         }
         config = updateGlobalProxyGroup(config, enabled: mode == "global")
         try? saveConfig(config)
+    }
+
+    /// Update the default proxy group (referenced by the last rule) to contain only the selected node.
+    /// This ensures the correct node is active from startup without needing REST API selection.
+    func applySelectedNode() {
+        let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
+        guard let selectedNode = defaults?.string(forKey: "selectedNode"), !selectedNode.isEmpty else {
+            return
+        }
+        guard var yaml = try? loadConfig() else { return }
+
+        // Find the default proxy group name from the last rule
+        let rules = parseRules(from: yaml)
+        guard let lastRule = rules.last else { return }
+        let defaultGroupName = lastRule.target
+
+        // Skip if the target is a built-in policy (DIRECT, REJECT)
+        guard defaultGroupName != "DIRECT" && defaultGroupName != "REJECT" else { return }
+
+        // Update the default proxy group to contain only the selected node
+        var groups = parseProxyGroups(from: yaml)
+        guard let idx = groups.firstIndex(where: { $0.name == defaultGroupName }) else { return }
+        groups[idx].proxies = [selectedNode]
+
+        yaml = updateProxyGroups(groups, in: yaml)
+        try? saveConfig(yaml)
     }
 
     /// Add or remove a GLOBAL proxy group with the selected node.
@@ -198,9 +225,8 @@ final class ConfigManager {
 
     /// Merge a Clash subscription YAML into our base config.
     /// Keeps our TUN/DNS/port settings and local rules; takes only proxies and proxy-groups from the subscription.
-    func applySubscriptionConfig(_ subscriptionYAML: String, selectedNode: String? = nil) throws {
-        let node = selectedNode ?? UserDefaults(suiteName: AppConstants.appGroupIdentifier)?.string(forKey: "selectedNode")
-        try saveConfig(mergeSubscription(subscriptionYAML, selectedNode: node))
+    func applySubscriptionConfig(_ subscriptionYAML: String) throws {
+        try saveConfig(mergeSubscription(subscriptionYAML))
     }
 
     /// Re-apply the currently selected subscription's config from shared UserDefaults.
@@ -301,16 +327,73 @@ final class ConfigManager {
     }
 
     /// Merge subscription YAML: take proxies, proxy-groups, rules, and their providers from subscription.
-    private func mergeSubscription(_ yaml: String, selectedNode: String? = nil) -> String {
+    private func mergeSubscription(_ yaml: String) -> String {
         let base = (try? loadConfig()) ?? defaultConfig()
-        return ConfigManager.mergeSubscription(yaml, selectedNode: selectedNode, baseConfig: base, defaultConfig: defaultConfig())
+        return ConfigManager.mergeSubscription(yaml, baseConfig: base, defaultConfig: defaultConfig())
     }
 
     /// Pure merge logic — takes all inputs as parameters for testability.
-    static func mergeSubscription(_ yaml: String, selectedNode: String? = nil, baseConfig: String, defaultConfig: String) -> String {
-        let wantedSections = ["proxies", "proxy-groups", "proxy-providers", "rules", "rule-providers"]
+    /// Overwrites local config's proxy nodes, proxy groups, and rules with subscription data.
+    /// Keeps the header (ports, DNS, TUN settings) from the base config.
+    static func mergeSubscription(_ yaml: String, baseConfig: String, defaultConfig: String) -> String {
+        // 1. Extract raw sections from subscription (preserves exact formatting for proxies/providers)
+        let sub = extractYAMLSections(from: yaml, named: ["proxies", "proxy-groups", "proxy-providers", "rules", "rule-providers"])
+
+        // 2. Header from base config (everything before proxies:) preserves user edits to ports, DNS, etc.
+        let baseLines = baseConfig.components(separatedBy: "\n")
+        let proxiesCut = baseLines.firstIndex(where: { !$0.hasPrefix(" ") && !$0.hasPrefix("\t") && $0.hasPrefix("proxies:") }) ?? baseLines.count
+        let header = baseLines[0..<proxiesCut].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 3. Extract proxy node names via Yams for reliable parsing
+        let parsed = (try? Yams.load(yaml: yaml)) as? [String: Any]
+        let proxiesArray = parsed?["proxies"] as? [[String: Any]] ?? []
+        let proxyNames = extractProxyNames(from: proxiesArray)
+
+        // 4. Build merged config
+        var result = header
+
+        // Overwrite proxy nodes (raw pass-through preserves passwords, ciphers, etc.)
+        result += "\n\n" + (sub["proxies"] ?? "proxies: []")
+
+        // Overwrite proxy groups: PROXY selector (all nodes + DIRECT) + subscription groups
+        let subGroups = parsed?["proxy-groups"] as? [[String: Any]] ?? []
+        var pgSection = "proxy-groups:\n"
+        pgSection += "  - name: PROXY\n    type: select\n    proxies:\n"
+        for name in proxyNames {
+            pgSection += "      - \(name)\n"
+        }
+        pgSection += "      - DIRECT"
+        for group in subGroups {
+            guard let name = group["name"] as? String,
+                  let type = group["type"] as? String else { continue }
+            pgSection += "\n  - name: \(name)\n    type: \(type)"
+            if let url = group["url"] as? String { pgSection += "\n    url: \(url)" }
+            if let interval = group["interval"] as? Int { pgSection += "\n    interval: \(interval)" }
+            let proxies = group["proxies"] as? [String] ?? []
+            if proxies.isEmpty {
+                pgSection += "\n    proxies: []"
+            } else {
+                pgSection += "\n    proxies:"
+                for p in proxies { pgSection += "\n      - \(p)" }
+            }
+        }
+        result += "\n\n" + pgSection
+
+        // Add subscription providers (raw pass-through)
+        if let pp = sub["proxy-providers"] { result += "\n\n" + pp }
+        if let rp = sub["rule-providers"] { result += "\n\n" + rp }
+
+        // Overwrite rules (fall back to default rules if subscription has none)
+        let defaultRules = extractYAMLSections(from: defaultConfig, named: ["rules"])
+        result += "\n\n" + (sub["rules"] ?? defaultRules["rules"] ?? "rules:\n  - MATCH,DIRECT")
+
+        return result
+    }
+
+    /// Extract top-level YAML sections by name.
+    static func extractYAMLSections(from yaml: String, named wanted: [String]) -> [String: String] {
         var extracted: [String: String] = [:]
-        var currentKey: String? = nil
+        var currentKey: String?
         var currentLines: [String] = []
 
         func flush() {
@@ -318,7 +401,6 @@ final class ConfigManager {
             extracted[key] = currentLines.joined(separator: "\n")
         }
 
-        // Normalize line endings: CRLF (\r\n) or bare CR (\r) → LF (\n).
         let normalized = yaml
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
@@ -330,126 +412,19 @@ final class ConfigManager {
                 flush()
                 let key = String(line.prefix(while: { $0 != ":" }))
                     .trimmingCharacters(in: .whitespaces)
-                currentKey = wantedSections.contains(key) ? key : nil
+                currentKey = wanted.contains(key) ? key : nil
                 currentLines = [line]
             } else if currentKey != nil {
                 currentLines.append(line)
             }
         }
         flush()
+        return extracted
+    }
 
-        // Header comes from base config (preserves user edits to ports, DNS, etc.);
-        // default rules always come from defaultConfig so they can never be lost.
-        // IMPORTANT: Only match top-level (non-indented) YAML keys to avoid matching
-        // "proxies:" or "rules:" nested inside proxy-group definitions.
-        let baseLines = baseConfig.components(separatedBy: "\n")
-        let proxiesCut = baseLines.firstIndex(where: { !$0.hasPrefix(" ") && !$0.hasPrefix("\t") && $0.hasPrefix("proxies:") }) ?? baseLines.count
-        let header = baseLines[0..<proxiesCut].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let defaultLines = defaultConfig.components(separatedBy: "\n")
-        let defaultRulesCut = defaultLines.firstIndex(where: { !$0.hasPrefix(" ") && !$0.hasPrefix("\t") && $0.hasPrefix("rules:") }) ?? defaultLines.count
-        let defaultRulesSection = defaultLines[defaultRulesCut...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-
-        var result = header
-        result += "\n\n" + (extracted["proxies"] ?? "proxies: []")
-
-        // Find the first usable proxy group name from subscription.
-        var firstGroupName: String?
-        if let pgYAML = extracted["proxy-groups"] {
-            for line in pgYAML.components(separatedBy: "\n") {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                let nameValue: String?
-                if trimmed.hasPrefix("- name:") {
-                    nameValue = String(trimmed.dropFirst(7)).trimmingCharacters(in: .whitespaces)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-                } else if trimmed.hasPrefix("name:") {
-                    nameValue = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-                } else {
-                    nameValue = nil
-                }
-                if let name = nameValue, !name.isEmpty, name != "DIRECT", name != "REJECT" {
-                    firstGroupName = name
-                    break
-                }
-            }
-        }
-
-        // Inject a PROXY selector so local rules referencing "PROXY" resolve correctly.
-        // When a node is selected, it is the exclusive proxy in this group (no DIRECT fallback)
-        // so that all traffic routed through the default group goes through the selected node.
-        var proxyGroupBlock = "proxy-groups:\n"
-        proxyGroupBlock += "  - name: PROXY\n"
-        proxyGroupBlock += "    type: select\n"
-        proxyGroupBlock += "    proxies:\n"
-        if let node = selectedNode, !node.isEmpty {
-            proxyGroupBlock += "      - \(node)"
-        } else if let name = firstGroupName {
-            proxyGroupBlock += "      - \(name)\n"
-            proxyGroupBlock += "      - DIRECT"
-        } else {
-            proxyGroupBlock += "      - DIRECT"
-        }
-        result += "\n\n" + proxyGroupBlock
-
-        // Append subscription's proxy-groups after the PROXY group,
-        // replacing the first group's proxies with only the selected node.
-        if let pgYAML = extracted["proxy-groups"] {
-            var pgLines = Array(pgYAML.components(separatedBy: "\n").dropFirst())
-            if let node = selectedNode, !node.isEmpty {
-                var firstGroupFound = false
-                var inProxies = false
-                var removeStart = -1
-                var removeEnd = -1
-                for i in 0..<pgLines.count {
-                    let trimmed = pgLines[i].trimmingCharacters(in: .whitespaces)
-                    if trimmed.hasPrefix("- name:") {
-                        if firstGroupFound { if inProxies { removeEnd = i }; break }
-                        firstGroupFound = true
-                        continue
-                    }
-                    guard firstGroupFound else { continue }
-                    if !inProxies && trimmed.hasPrefix("proxies:") {
-                        inProxies = true
-                        removeStart = i
-                        if trimmed != "proxies:" { continue }
-                        continue
-                    }
-                    if inProxies {
-                        if !trimmed.hasPrefix("- ") || trimmed.hasPrefix("- name:") {
-                            removeEnd = i; break
-                        }
-                    }
-                }
-                if removeStart >= 0 {
-                    if removeEnd < 0 { removeEnd = pgLines.count }
-                    pgLines.replaceSubrange(removeStart..<removeEnd, with: [
-                        "    proxies:", "      - \(node)",
-                    ])
-                }
-            }
-            let entries = pgLines.joined(separator: "\n")
-            if !entries.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                result += "\n" + entries
-            }
-        }
-
-        if let proxyProviders = extracted["proxy-providers"] {
-            result += "\n\n" + proxyProviders
-        }
-
-        if let ruleProviders = extracted["rule-providers"] {
-            result += "\n\n" + ruleProviders
-        }
-
-        // Use subscription rules if available, otherwise always use default rules.
-        if let subRules = extracted["rules"] {
-            result += "\n\n" + subRules
-        } else {
-            result += "\n\n" + defaultRulesSection
-        }
-
-        return result
+    /// Extract all proxy node names from a Yams-parsed proxies array.
+    static func extractProxyNames(from proxies: [[String: Any]]) -> [String] {
+        proxies.compactMap { $0["name"] as? String }
     }
 
     func defaultConfig() -> String {
@@ -590,100 +565,29 @@ struct EditableRule: Identifiable {
 extension ConfigManager {
 
     func parseProxyGroups(from yaml: String) -> [EditableProxyGroup] {
-        let lines = yaml.components(separatedBy: "\n")
-        var groups: [EditableProxyGroup] = []
-        var inSection = false
-        var name = ""
-        var type = ""
-        var proxies: [String] = []
-        var url: String?
-        var interval: Int?
-        var inProxies = false
-        var hasGroup = false
-
-        func flushGroup() {
-            if hasGroup && !name.isEmpty {
-                groups.append(EditableProxyGroup(name: name, type: type, proxies: proxies, url: url, interval: interval))
-            }
-            name = ""; type = ""; proxies = []; url = nil; interval = nil
-            inProxies = false; hasGroup = false
+        guard let dict = (try? Yams.load(yaml: yaml)) as? [String: Any],
+              let groupList = dict["proxy-groups"] as? [[String: Any]] else {
+            return []
         }
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            if !line.hasPrefix(" ") && !line.hasPrefix("\t") && !line.isEmpty {
-                if trimmed.hasPrefix("proxy-groups:") {
-                    inSection = true
-                    if trimmed == "proxy-groups: []" { return [] }
-                    continue
-                } else if inSection {
-                    flushGroup()
-                    inSection = false
-                    continue
-                }
-            }
-
-            guard inSection else { continue }
-
-            if trimmed.hasPrefix("- name:") {
-                flushGroup()
-                name = stripQuotes(String(trimmed.dropFirst(7)).trimmingCharacters(in: .whitespaces))
-                hasGroup = true
-                inProxies = false
-            } else if hasGroup && trimmed.hasPrefix("type:") {
-                type = stripQuotes(String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces))
-            } else if hasGroup && trimmed.hasPrefix("url:") && !trimmed.hasPrefix("url-") {
-                url = stripQuotes(String(trimmed.dropFirst(4)).trimmingCharacters(in: .whitespaces))
-            } else if hasGroup && trimmed.hasPrefix("interval:") {
-                interval = Int(trimmed.dropFirst(9).trimmingCharacters(in: .whitespaces))
-            } else if hasGroup && trimmed == "proxies:" {
-                inProxies = true
-            } else if hasGroup && trimmed.hasPrefix("proxies:") && trimmed != "proxies:" {
-                let val = String(trimmed.dropFirst(8)).trimmingCharacters(in: .whitespaces)
-                if val == "[]" { proxies = [] }
-                inProxies = false
-            } else if inProxies && trimmed.hasPrefix("- ") {
-                proxies.append(stripQuotes(String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)))
-            } else if inProxies && !trimmed.isEmpty && !trimmed.hasPrefix("-") && !trimmed.hasPrefix("#") {
-                inProxies = false
-            }
+        return groupList.compactMap { group -> EditableProxyGroup? in
+            guard let name = group["name"] as? String,
+                  let type = group["type"] as? String else { return nil }
+            let proxies = group["proxies"] as? [String] ?? []
+            let url = group["url"] as? String
+            let interval = group["interval"] as? Int
+            return EditableProxyGroup(name: name, type: type, proxies: proxies, url: url, interval: interval)
         }
-
-        flushGroup()
-        return groups
     }
 
     func parseRules(from yaml: String) -> [EditableRule] {
-        let lines = yaml.components(separatedBy: "\n")
+        guard let dict = (try? Yams.load(yaml: yaml)) as? [String: Any],
+              let ruleStrings = dict["rules"] as? [String] else {
+            return []
+        }
         var rules: [EditableRule] = []
-        var inRules = false
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            // Detect top-level YAML keys. Lines starting with "- " are list items
-            // (e.g. non-indented rules from subscriptions), not section headers.
-            let isTopLevel = !line.hasPrefix(" ") && !line.hasPrefix("\t")
-                && !line.isEmpty && !line.hasPrefix("-") && !line.hasPrefix("#")
-            if isTopLevel {
-                if trimmed.hasPrefix("rules:") {
-                    inRules = true
-                    if trimmed == "rules: []" { return [] }
-                    continue
-                } else if inRules {
-                    break
-                }
-            }
-
-            guard inRules else { continue }
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            guard trimmed.hasPrefix("- ") else { continue }
-
-            let ruleStr = String(trimmed.dropFirst(2))
+        for ruleStr in ruleStrings {
             let parts = ruleStr.components(separatedBy: ",")
             guard parts.count >= 2 else { continue }
-
             let ruleType = parts[0].trimmingCharacters(in: .whitespaces)
             if ruleType == "MATCH" {
                 rules.append(EditableRule(type: ruleType, value: "", target: parts[1].trimmingCharacters(in: .whitespaces), noResolve: false))
@@ -697,7 +601,6 @@ extension ConfigManager {
                 ))
             }
         }
-
         return rules
     }
 
