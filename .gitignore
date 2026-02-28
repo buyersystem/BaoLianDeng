@@ -50,3 +50,7 @@ vendor/bundle/
 
 # Local build settings (contains DEVELOPMENT_TEAM)
 Local.xcconfig
+
+# Claude Code
+CLAUDE.md
+.claude/
