@@ -96,7 +96,15 @@ final class ConfigManager {
         try? saveConfig(config)
     }
 
-    /// Update the default proxy group (referenced by the last rule) to contain only the selected node.
+    /// Return all proxy group names with type "select" from config.yaml.
+    func selectProxyGroupNames() -> [String] {
+        guard let yaml = try? loadConfig() else { return [] }
+        return parseProxyGroups(from: yaml)
+            .filter { $0.type == "select" }
+            .map(\.name)
+    }
+
+    /// Update all select-type proxy groups to contain only the selected node.
     /// This ensures the correct node is active from startup without needing REST API selection.
     func applySelectedNode() {
         let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
@@ -105,18 +113,13 @@ final class ConfigManager {
         }
         guard var yaml = try? loadConfig() else { return }
 
-        // Find the default proxy group name from the last rule
-        let rules = parseRules(from: yaml)
-        guard let lastRule = rules.last else { return }
-        let defaultGroupName = lastRule.target
-
-        // Skip if the target is a built-in policy (DIRECT, REJECT)
-        guard defaultGroupName != "DIRECT" && defaultGroupName != "REJECT" else { return }
-
-        // Update the default proxy group to contain only the selected node
         var groups = parseProxyGroups(from: yaml)
-        guard let idx = groups.firstIndex(where: { $0.name == defaultGroupName }) else { return }
-        groups[idx].proxies = [selectedNode]
+        var changed = false
+        for i in groups.indices where groups[i].type == "select" {
+            groups[i].proxies = [selectedNode]
+            changed = true
+        }
+        guard changed else { return }
 
         yaml = updateProxyGroups(groups, in: yaml)
         try? saveConfig(yaml)

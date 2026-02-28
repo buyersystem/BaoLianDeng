@@ -257,18 +257,11 @@ struct HomeView: View {
                             onSelect: {
                                 selectedNode = node.name
                                 saveSelectedNode(node.name)
-                                // Also select this node's subscription if not already selected
                                 if selectedSubscriptionID != sub.id {
-                                    selectedSubscriptionID = sub.id
-                                    UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
-                                        .set(sub.id.uuidString, forKey: "selectedSubscriptionID")
+                                    // Switch subscription: merge its config, then select node
+                                    selectSubscription(sub)
                                 }
-                                if let raw = sub.rawContent {
-                                    let nodeName = node.name
-                                    Task.detached {
-                                        try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: nodeName)
-                                    }
-                                }
+                                vpnManager.selectNode(node.name)
                             }
                         )
                     }
@@ -305,10 +298,10 @@ struct HomeView: View {
         }
         // Apply the subscription YAML to config.yaml so the VPN uses it
         if let raw = sub.rawContent {
-            let node = selectedNode
             Task.detached {
-                try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: node)
+                try? ConfigManager.shared.applySubscriptionConfig(raw)
                 await ConfigManager.shared.downloadGeoDataIfNeeded()
+                await Self.reloadMihomoConfig()
             }
         }
     }
@@ -354,7 +347,7 @@ struct HomeView: View {
                 // Apply cached subscription config to config.yaml on launch
                 if let sub = result.subs.first(where: { $0.id == id }),
                    let raw = sub.rawContent {
-                    try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: result.selectedNode)
+                    try? ConfigManager.shared.applySubscriptionConfig(raw)
                 }
             }
         }
@@ -374,14 +367,17 @@ struct HomeView: View {
             .set(name, forKey: "selectedNode")
     }
 
-    private func reapplyConfigForSelectedNode() {
-        guard let selectedID = selectedSubscriptionID,
-              let sub = subscriptions.first(where: { $0.id == selectedID }),
-              let raw = sub.rawContent else { return }
-        let node = selectedNode
-        Task.detached {
-            try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: node)
-        }
+    /// Reload Mihomo's running config via the external controller REST API.
+    /// This makes config.yaml changes (e.g. subscription refresh) take effect immediately
+    /// without restarting the VPN tunnel.
+    static func reloadMihomoConfig() async {
+        guard let url = URL(string: "http://\(AppConstants.externalControllerAddr)/configs?force=true") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let configPath = ConfigManager.shared.configFileURL?.path ?? ""
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["path": configPath])
+        _ = try? await URLSession.shared.data(for: request)
     }
 
     private func fetchNewSubscriptions() {
@@ -460,7 +456,8 @@ struct HomeView: View {
                 saveSubscriptions()
                 // Apply to config.yaml if this is the selected subscription
                 if id == selectedSubscriptionID {
-                    try? ConfigManager.shared.applySubscriptionConfig(result.raw, selectedNode: selectedNode)
+                    try? ConfigManager.shared.applySubscriptionConfig(result.raw)
+                    await Self.reloadMihomoConfig()
                 }
                 displayToast("Updated \(name) (\(result.nodes.count) nodes)")
             } catch {
@@ -534,7 +531,8 @@ struct HomeView: View {
         if let selID = selectedSubscriptionID,
            let sub = subscriptions.first(where: { $0.id == selID }),
            let raw = sub.rawContent {
-            try? ConfigManager.shared.applySubscriptionConfig(raw, selectedNode: selectedNode)
+            try? ConfigManager.shared.applySubscriptionConfig(raw)
+            await Self.reloadMihomoConfig()
         }
         isReloading = false
         reloadResult = ReloadResult(succeeded: succeeded, failed: failed)

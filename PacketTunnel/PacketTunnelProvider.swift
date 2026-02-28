@@ -90,6 +90,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         ConfigManager.shared.applyMode()
         log("Mode applied")
 
+        ConfigManager.shared.applySelectedNode()
+        log("Selected node applied to default proxy group")
+
         // Log config summary for debugging
         if let cfg = try? String(contentsOfFile: configPath, encoding: .utf8) {
             log("config.yaml preview: \(String(cfg.prefix(300)))")
@@ -136,6 +139,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             self?.setupLogging()
             self?.startMemoryManagement()
             self?.startDiagnosticLogging()
+            // Select the saved proxy node via REST API
+            self?.selectSavedProxyNode()
             completionHandler(nil)
 
             // Run connectivity diagnostics in background
@@ -189,6 +194,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         case "get_version":
             let version = BridgeVersion()
             completionHandler?(responseData(["version": version ?? "unknown"]))
+
+        case "select_node":
+            let nodeName = message["node"] as? String
+            selectSavedProxyNode(nodeName: nodeName)
+            completionHandler?(nil)
 
         default:
             completionHandler?(nil)
@@ -267,6 +277,43 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             }
         }
         return nil
+    }
+
+    /// Select a proxy node via Mihomo's REST API.
+    /// If `nodeName` is provided, use it directly; otherwise fall back to UserDefaults.
+    private func selectSavedProxyNode(nodeName: String? = nil) {
+        let resolvedName: String
+        if let name = nodeName, !name.isEmpty {
+            resolvedName = name
+        } else if let saved = UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
+                    .string(forKey: "selectedNode"), !saved.isEmpty {
+            resolvedName = saved
+        } else {
+            log("No saved proxy node to select")
+            return
+        }
+        let groupNames = ConfigManager.shared.selectProxyGroupNames()
+        if groupNames.isEmpty {
+            log("No select-type proxy groups found in config")
+            return
+        }
+        log("Selecting proxy node: \(resolvedName) in groups: \(groupNames)")
+        let body = try? JSONSerialization.data(withJSONObject: ["name": resolvedName])
+        for groupName in groupNames {
+            guard let encodedGroup = groupName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                  let url = URL(string: "http://\(AppConstants.externalControllerAddr)/proxies/\(encodedGroup)") else { continue }
+            var request = URLRequest(url: url)
+            request.httpMethod = "PUT"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+            URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+                if let error = error {
+                    self?.log("Failed to select node in \(groupName): \(error.localizedDescription)")
+                } else if let httpResponse = response as? HTTPURLResponse {
+                    self?.log("Select node in \(groupName): \(httpResponse.statusCode)")
+                }
+            }.resume()
+        }
     }
 
     private func setupLogging() {

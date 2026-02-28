@@ -85,6 +85,9 @@ final class VPNManager: ObservableObject {
             if connection.status != .connecting && connection.status != .disconnecting {
                 self?.isProcessing = false
             }
+            if connection.status == .connected {
+                self?.selectSavedProxyNode()
+            }
             if connection.status == .disconnected {
                 VPNManager.clearTunnelLog()
             }
@@ -218,6 +221,19 @@ final class VPNManager: ObservableObject {
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
         return true
+    }
+
+    /// Select a specific proxy node in the running tunnel via IPC.
+    func selectNode(_ nodeName: String) {
+        sendMessage(["action": "select_node", "node": nodeName]) { _ in }
+    }
+
+    /// Tell the PacketTunnel to select the user's saved proxy node via IPC.
+    private func selectSavedProxyNode() {
+        // Delay to let Mihomo's external controller finish initializing
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.sendMessage(["action": "select_node"]) { _ in }
+        }
     }
 
     private static func clearTunnelLog() {
