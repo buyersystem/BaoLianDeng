@@ -35,6 +35,8 @@ struct ConfigEditorView: View {
     @State private var showSaved = false
     @State private var showAddGroup = false
     @State private var showAddRule = false
+    @State private var isLoaded = false
+    @State private var scrollToTopTrigger = false
 
     var isSubscriptionSource: Bool {
         if case .subscription = source { return true }
@@ -43,24 +45,46 @@ struct ConfigEditorView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if selectedSubscription != nil {
-                    Section {
-                        Picker("Source", selection: $source) {
-                            Text("Local Config").tag(ConfigSource.local)
-                            if let sub = selectedSubscription {
-                                Text(sub.name).tag(ConfigSource.subscription(sub.id))
+            ScrollViewReader { proxy in
+                List {
+                    if selectedSubscription != nil {
+                        Section {
+                            Picker("Source", selection: $source) {
+                                Text("Local Config").tag(ConfigSource.local)
+                                if let sub = selectedSubscription {
+                                    Text(sub.name).tag(ConfigSource.subscription(sub.id))
+                                }
                             }
+                            .pickerStyle(.segmented)
                         }
-                        .pickerStyle(.segmented)
+                        .id("sourcePicker")
+                    }
+
+                    proxyGroupsSection
+                        .id("proxyGroupsTop")
+                    rulesSection
+                }
+                .onChange(of: scrollToTopTrigger) { _, _ in
+                    withAnimation {
+                        if selectedSubscription != nil {
+                            proxy.scrollTo("sourcePicker", anchor: .top)
+                        } else {
+                            proxy.scrollTo("proxyGroupsTop", anchor: .top)
+                        }
                     }
                 }
-
-                proxyGroupsSection
-                rulesSection
             }
-            .navigationTitle("Config")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Config")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) {
+                            scrollToTopTrigger.toggle()
+                        }
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     if !isSubscriptionSource {
                         EditButton()
@@ -102,6 +126,8 @@ struct ConfigEditorView: View {
                 }
             }
             .onAppear {
+                guard !isLoaded else { return }
+                isLoaded = true
                 loadConfig()
                 loadSelectedSubscription()
             }
