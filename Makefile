@@ -13,15 +13,68 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-.PHONY: all framework clean
+RUST_FFI_DIR = Rust/mihomo-ffi
+FFI_OBJC = $(RUST_FFI_DIR)/objc
+FRAMEWORK_DIR = Framework
+FRAMEWORK_NAME = MihomoCore
+BUILD_DIR = /tmp/mihomo-ffi-build
+
+# Rust build flags for iOS
+CARGO_FLAGS = --release
+RUSTFLAGS_IOS = -C strip=symbols
+
+# iOS SDK paths
+IOS_SDK = $(shell xcrun --sdk iphoneos --show-sdk-path)
+SIM_SDK = $(shell xcrun --sdk iphonesimulator --show-sdk-path)
+
+.PHONY: all framework framework-arm64 clean
 
 all: framework
 
 framework:
-	cd Go/mihomo-bridge && $(MAKE) ios
+	# Build Rust staticlib for each target
+	cd $(RUST_FFI_DIR) && RUSTFLAGS="$(RUSTFLAGS_IOS)" cargo build $(CARGO_FLAGS) --target aarch64-apple-ios
+	cd $(RUST_FFI_DIR) && RUSTFLAGS="$(RUSTFLAGS_IOS)" cargo build $(CARGO_FLAGS) --target aarch64-apple-ios-sim
+	cd $(RUST_FFI_DIR) && RUSTFLAGS="$(RUSTFLAGS_IOS)" cargo build $(CARGO_FLAGS) --target x86_64-apple-ios
+	# Compile ObjC wrapper for each arch
+	@mkdir -p $(BUILD_DIR)
+	xcrun clang -c $(FFI_OBJC)/MihomoCore.m -o $(BUILD_DIR)/objc-device.o \
+		-target arm64-apple-ios17.0 -fobjc-arc -isysroot $(IOS_SDK) -I$(FFI_OBJC)
+	xcrun clang -c $(FFI_OBJC)/MihomoCore.m -o $(BUILD_DIR)/objc-sim-arm64.o \
+		-target arm64-apple-ios17.0-simulator -fobjc-arc -isysroot $(SIM_SDK) -I$(FFI_OBJC)
+	xcrun clang -c $(FFI_OBJC)/MihomoCore.m -o $(BUILD_DIR)/objc-sim-x86.o \
+		-target x86_64-apple-ios17.0-simulator -fobjc-arc -isysroot $(SIM_SDK) -I$(FFI_OBJC)
+	# Combine Rust .a + ObjC .o into single .a per target
+	xcrun libtool -static -o $(BUILD_DIR)/device.a \
+		$(RUST_FFI_DIR)/target/aarch64-apple-ios/release/libmihomo_ffi.a $(BUILD_DIR)/objc-device.o
+	xcrun libtool -static -o $(BUILD_DIR)/sim-arm64.a \
+		$(RUST_FFI_DIR)/target/aarch64-apple-ios-sim/release/libmihomo_ffi.a $(BUILD_DIR)/objc-sim-arm64.o
+	xcrun libtool -static -o $(BUILD_DIR)/sim-x86.a \
+		$(RUST_FFI_DIR)/target/x86_64-apple-ios/release/libmihomo_ffi.a $(BUILD_DIR)/objc-sim-x86.o
+	# Fat library for simulator (arm64 + x86_64)
+	lipo -create $(BUILD_DIR)/sim-arm64.a $(BUILD_DIR)/sim-x86.a -output $(BUILD_DIR)/sim.a
+	# Create xcframework
+	rm -rf $(FRAMEWORK_DIR)/$(FRAMEWORK_NAME).xcframework
+	xcodebuild -create-xcframework \
+		-library $(BUILD_DIR)/device.a -headers $(FFI_OBJC) \
+		-library $(BUILD_DIR)/sim.a -headers $(FFI_OBJC) \
+		-output $(FRAMEWORK_DIR)/$(FRAMEWORK_NAME).xcframework
+	@echo "Built $(FRAMEWORK_DIR)/$(FRAMEWORK_NAME).xcframework"
 
 framework-arm64:
-	cd Go/mihomo-bridge && $(MAKE) ios-arm64
+	cd $(RUST_FFI_DIR) && RUSTFLAGS="$(RUSTFLAGS_IOS)" cargo build $(CARGO_FLAGS) --target aarch64-apple-ios
+	@mkdir -p $(BUILD_DIR)
+	xcrun clang -c $(FFI_OBJC)/MihomoCore.m -o $(BUILD_DIR)/objc-device.o \
+		-target arm64-apple-ios17.0 -fobjc-arc -isysroot $(IOS_SDK) -I$(FFI_OBJC)
+	xcrun libtool -static -o $(BUILD_DIR)/device.a \
+		$(RUST_FFI_DIR)/target/aarch64-apple-ios/release/libmihomo_ffi.a $(BUILD_DIR)/objc-device.o
+	rm -rf $(FRAMEWORK_DIR)/$(FRAMEWORK_NAME).xcframework
+	xcodebuild -create-xcframework \
+		-library $(BUILD_DIR)/device.a -headers $(FFI_OBJC) \
+		-output $(FRAMEWORK_DIR)/$(FRAMEWORK_NAME).xcframework
+	@echo "Built $(FRAMEWORK_DIR)/$(FRAMEWORK_NAME).xcframework (arm64 only)"
 
 clean:
-	cd Go/mihomo-bridge && $(MAKE) clean
+	rm -rf $(FRAMEWORK_DIR)/$(FRAMEWORK_NAME).xcframework
+	rm -rf $(BUILD_DIR)
+	cd $(RUST_FFI_DIR) && cargo clean

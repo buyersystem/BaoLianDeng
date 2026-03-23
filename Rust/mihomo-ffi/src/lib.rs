@@ -3,7 +3,9 @@ mod logging;
 mod tun_fd;
 
 use mihomo_api::ApiServer;
-use mihomo_listener::{MixedListener, TunListenerConfig};
+use mihomo_listener::MixedListener;
+#[cfg(not(target_os = "ios"))]
+use mihomo_listener::TunListenerConfig;
 use mihomo_tunnel::Tunnel;
 use parking_lot::Mutex;
 use std::ffi::{CStr, CString};
@@ -360,25 +362,28 @@ async fn start_engine_async(
                 tracing::error!("TUN fd listener error: {}", e);
             }
         }));
-    } else if let Some(ref tun_config) = config.tun {
-        if tun_config.enable {
-            // Desktop path: create TUN device
-            let tun_listener_config = TunListenerConfig {
-                device: tun_config.device.clone(),
-                mtu: tun_config.mtu,
-                inet4_address: tun_config.inet4_address.clone(),
-                dns_hijack: tun_config.dns_hijack.clone(),
-            };
-            let tun = mihomo_listener::TunListener::new(
-                tunnel.clone(),
-                tun_listener_config,
-                config.dns.resolver.clone(),
-            );
-            handles.push(tokio::spawn(async move {
-                if let Err(e) = tun.run().await {
-                    tracing::error!("TUN listener error: {}", e);
-                }
-            }));
+    } else {
+        #[cfg(not(target_os = "ios"))]
+        if let Some(ref tun_config) = config.tun {
+            if tun_config.enable {
+                // Desktop path: create TUN device
+                let tun_listener_config = TunListenerConfig {
+                    device: tun_config.device.clone(),
+                    mtu: tun_config.mtu,
+                    inet4_address: tun_config.inet4_address.clone(),
+                    dns_hijack: tun_config.dns_hijack.clone(),
+                };
+                let tun = mihomo_listener::TunListener::new(
+                    tunnel.clone(),
+                    tun_listener_config,
+                    config.dns.resolver.clone(),
+                );
+                handles.push(tokio::spawn(async move {
+                    if let Err(e) = tun.run().await {
+                        tracing::error!("TUN listener error: {}", e);
+                    }
+                }));
+            }
         }
     }
 
