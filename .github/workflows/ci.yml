@@ -27,23 +27,27 @@ concurrency:
 
 jobs:
   build-framework:
-    name: Build Go Framework
+    name: Build Rust Framework
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
-          cache: false
+          submodules: recursive
 
-      - name: Cache Go modules
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Cache Rust artifacts
         uses: actions/cache@v4
         with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-gomod-${{ hashFiles('Go/mihomo-bridge/go.sum') }}
-          restore-keys: ${{ runner.os }}-gomod-
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            Rust/mihomo-ffi/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('Rust/mihomo-ffi/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-rust-
 
       - name: Build MihomoCore.xcframework
         run: make framework
