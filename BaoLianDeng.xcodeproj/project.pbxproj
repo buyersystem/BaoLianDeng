@@ -607,7 +607,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				OTHER_LDFLAGS = "-lresolv";
+				OTHER_LDFLAGS = (
+					"-lresolv",
+					"-ObjC",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -638,7 +641,10 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				OTHER_LDFLAGS = "-lresolv";
+				OTHER_LDFLAGS = (
+					"-lresolv",
+					"-ObjC",
+				);
 				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -667,7 +673,10 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				OTHER_LDFLAGS = "-lresolv";
+				OTHER_LDFLAGS = (
+					"-lresolv",
+					"-ObjC",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -695,7 +704,10 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				OTHER_LDFLAGS = "-lresolv";
+				OTHER_LDFLAGS = (
+					"-lresolv",
+					"-ObjC",
+				);
 				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng.PacketTunnel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
