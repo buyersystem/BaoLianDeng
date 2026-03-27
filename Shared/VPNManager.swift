@@ -13,9 +13,14 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#if canImport(AppKit)
+import AppKit
+#endif
 import Foundation
 import NetworkExtension
+#if canImport(SystemExtensions)
 import SystemExtensions
+#endif
 
 final class VPNManager: NSObject, ObservableObject {
     static let shared = VPNManager()
@@ -23,7 +28,9 @@ final class VPNManager: NSObject, ObservableObject {
     @Published var status: NEVPNStatus = .disconnected
     @Published var isProcessing = false
     @Published var errorMessage: String?
+    #if canImport(SystemExtensions)
     @Published var extensionInstalled = false
+    #endif
     private func dbg(_ msg: String) {
         #if DEBUG
         AppLogger.vpn.debug("\(msg, privacy: .public)")
@@ -35,38 +42,25 @@ final class VPNManager: NSObject, ObservableObject {
 
     private override init() {
         super.init()
-        sysextLog("init — calling activateSystemExtension")
+        #if canImport(SystemExtensions)
         activateSystemExtension()
-    }
-
-    private func sysextLog(_ msg: String) {
-        let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(msg)\n"
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let path = dir.appendingPathComponent("sysext.log").path
-        if let data = line.data(using: .utf8) {
-            if let handle = FileHandle(forWritingAtPath: path) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                handle.closeFile()
-            } else {
-                FileManager.default.createFile(atPath: path, contents: data)
-            }
-        }
+        #else
+        loadManager()
+        #endif
     }
 
     // MARK: - System Extension Activation
 
+    #if canImport(SystemExtensions)
     func activateSystemExtension() {
-        let id = AppConstants.tunnelBundleIdentifier
-        NSLog("[VPN] activateSystemExtension: %@", id)
         let request = OSSystemExtensionRequest.activationRequest(
-            forExtensionWithIdentifier: id,
+            forExtensionWithIdentifier: AppConstants.tunnelBundleIdentifier,
             queue: .main
         )
         request.delegate = self
         OSSystemExtensionManager.shared.submitRequest(request)
     }
+    #endif
 
     deinit {
         if let observer = statusObserver {
@@ -428,11 +422,12 @@ final class VPNManager: NSObject, ObservableObject {
     }
 }
 
+#if canImport(SystemExtensions)
 // MARK: - OSSystemExtensionRequestDelegate
 
 extension VPNManager: OSSystemExtensionRequestDelegate {
     func request(_ request: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
-        sysextLog("didFinish: result=\(result.rawValue)")
+        dbg("didFinish: result=\(result.rawValue)")
         switch result {
         case .completed:
             extensionInstalled = true
@@ -446,7 +441,7 @@ extension VPNManager: OSSystemExtensionRequestDelegate {
 
     func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
         let nsError = error as NSError
-        sysextLog("didFail: \(error.localizedDescription) domain=\(nsError.domain) code=\(nsError.code)")
+        dbg("didFail: \(error.localizedDescription) domain=\(nsError.domain) code=\(nsError.code)")
         DispatchQueue.main.async {
             self.errorMessage = "Sysext error \(nsError.code): \(error.localizedDescription)"
         }
@@ -455,14 +450,21 @@ extension VPNManager: OSSystemExtensionRequestDelegate {
     }
 
     func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
-        sysextLog("needsUserApproval")
-        errorMessage = "Allow the system extension in System Settings → Privacy & Security"
+        dbg("needsUserApproval")
+        DispatchQueue.main.async {
+            self.errorMessage = "Allow the network extension in System Settings"
+            // Open System Settings to the Network Extensions pane
+            if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
     func request(_ request: OSSystemExtensionRequest,
                  actionForReplacingExtension existing: OSSystemExtensionProperties,
                  withExtension ext: OSSystemExtensionProperties) -> OSSystemExtensionRequest.ReplacementAction {
-        sysextLog("replacing \(existing.bundleShortVersion) with \(ext.bundleShortVersion)")
+        dbg("replacing \(existing.bundleShortVersion) with \(ext.bundleShortVersion)")
         return .replace
     }
 }
+#endif
