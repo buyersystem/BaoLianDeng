@@ -64,19 +64,20 @@ if [ ! -f "$APP_PROFILE" ] || [ ! -f "$APPEX_PROFILE" ]; then
   exit 1
 fi
 
-# Rewrite entitlements for Developer ID (systemextension variant)
-rewrite_entitlements() {
+# Extract entitlements and upgrade to systemextension variant for Developer ID.
+# Dev builds use "packet-tunnel-provider" but Developer ID profiles require
+# "packet-tunnel-provider-systemextension" — Apple enforces this for direct distribution.
+extract_devid_entitlements() {
   local binary="$1" output="$2"
   codesign -d --entitlements - --xml "$binary" 2>/dev/null > "$output"
-  # Swap packet-tunnel-provider → packet-tunnel-provider-systemextension
-  sed -i '' 's/packet-tunnel-provider/packet-tunnel-provider-systemextension/g' "$output"
+  sed -i '' 's/>packet-tunnel-provider</>packet-tunnel-provider-systemextension</g' "$output"
 }
 
 APPEX_PATH="${APP_PATH}/Contents/PlugIns/PacketTunnel.appex"
 if [ -d "$APPEX_PATH" ]; then
   echo "Embedding PacketTunnel profile and re-signing..."
   cp "$APPEX_PROFILE" "$APPEX_PATH/Contents/embedded.provisionprofile"
-  rewrite_entitlements "$APPEX_PATH" /tmp/appex-ent.plist
+  extract_devid_entitlements "$APPEX_PATH" /tmp/appex-ent.plist
   codesign --force --sign "$IDENTITY" --timestamp --options runtime \
     --entitlements /tmp/appex-ent.plist \
     "$APPEX_PATH"
@@ -84,7 +85,7 @@ fi
 
 echo "Embedding app profile and re-signing..."
 cp "$APP_PROFILE" "$APP_PATH/Contents/embedded.provisionprofile"
-rewrite_entitlements "$APP_PATH" /tmp/app-ent.plist
+extract_devid_entitlements "$APP_PATH" /tmp/app-ent.plist
 codesign --force --sign "$IDENTITY" --timestamp --options runtime \
   --entitlements /tmp/app-ent.plist \
   "$APP_PATH"
