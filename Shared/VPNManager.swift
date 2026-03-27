@@ -452,22 +452,17 @@ extension VPNManager: OSSystemExtensionRequestDelegate {
     func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
         let nsError = error as NSError
         dbg("didFail: \(error.localizedDescription) domain=\(nsError.domain) code=\(nsError.code)")
-        DispatchQueue.main.async {
-            self.errorMessage = "Sysext error \(nsError.code): \(error.localizedDescription)"
-        }
-        // Proceed with loadManager anyway — the old VPN config may still work
         loadManager()
     }
 
     func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
         dbg("needsUserApproval")
-        DispatchQueue.main.async {
-            self.errorMessage = "Allow the network extension in System Settings"
-            // Open System Settings to the Network Extensions pane
-            if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
-                NSWorkspace.shared.open(url)
-            }
+        // Open System Settings so the user can allow the extension
+        #if canImport(AppKit)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
+            NSWorkspace.shared.open(url)
         }
+        #endif
     }
 
     func request(_ request: OSSystemExtensionRequest,
