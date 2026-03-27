@@ -162,6 +162,18 @@ final class VPNManager: NSObject, ObservableObject {
             return
         }
 
+        #if canImport(SystemExtensions)
+        if !extensionInstalled {
+            dbg("start() extension not installed, opening System Settings")
+            #if canImport(AppKit)
+            if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
+                NSWorkspace.shared.open(url)
+            }
+            #endif
+            return
+        }
+        #endif
+
         isProcessing = true
         errorMessage = nil
 
