@@ -31,6 +31,7 @@ struct HomeView: View {
     @State private var scrollProxy: ScrollViewProxy?
     @State private var toastMessage: String = ""
     @State private var showToast: Bool = false
+    @State private var showExtensionHelp = false
 
     var body: some View {
         NavigationStack {
@@ -165,9 +166,8 @@ struct HomeView: View {
             }
 
             Button {
-                if vpnManager.extensionEnabled {
-                    // Already enabled, no action
-                } else {
+                if !vpnManager.extensionEnabled {
+                    showExtensionHelp = true
                     if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
                         NSWorkspace.shared.open(url)
                     }
@@ -183,6 +183,11 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             .disabled(vpnManager.extensionEnabled)
+            .alert("Enable Network Extension", isPresented: $showExtensionHelp) {
+                Button("OK") {}
+            } message: {
+                Text("System Settings has been opened.\n\nPlease go to Network Extensions and toggle on BaoLianDeng to enable the VPN.")
+            }
 
             Picker("Routing", selection: $selectedMode) {
                 ForEach(ProxyMode.allCases) { mode in
