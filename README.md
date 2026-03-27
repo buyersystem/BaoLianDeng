@@ -2,6 +2,8 @@
 
 macOS VPN proxy app powered by [Mihomo](https://github.com/MetaCubeX/mihomo) (Clash Meta) core.
 
+**[Download DMG](https://github.com/madeye/BaoLianDeng/releases/latest)** · **[Website](https://madeye.github.io/BaoLianDeng/)**
+
 ## Features
 
 - **Subscription Management** — Add, edit, refresh, and switch between proxy subscriptions (Clash YAML and base64 formats)
@@ -38,16 +40,24 @@ macOS VPN proxy app powered by [Mihomo](https://github.com/MetaCubeX/mihomo) (Cl
 └─────────────────────────────────────────────┘
 ```
 
-**IPC** between the app and tunnel extension uses `NETunnelProviderSession.sendMessage` for mode switching, traffic stats, and version queries. Both targets share config files and preferences via App Group `group.io.github.baoliandeng.macos`.
+**IPC** between the app and tunnel extension uses `NETunnelProviderSession.sendMessage` for mode switching, traffic stats, and version queries. Both targets share preferences via standard `UserDefaults`.
 
-## Prerequisites
+## Install
 
-- macOS 14.0+ with Xcode 15+
-- Rust toolchain (`rustup` with `aarch64-apple-darwin` and `x86_64-apple-darwin` targets)
+### From DMG (recommended)
 
-## Build
+1. Download the latest DMG from [Releases](https://github.com/madeye/BaoLianDeng/releases/latest)
+2. Open the DMG and drag **BaoLianDeng** to **Applications**
+3. Launch from Applications
+4. Allow the system extension when prompted
 
-### 1. Build the Rust framework
+The DMG is signed with Developer ID and notarized by Apple.
+
+### Build from Source
+
+**Prerequisites:** macOS 14.0+ with Xcode 15+, Rust toolchain (`rustup` with `aarch64-apple-darwin` and `x86_64-apple-darwin` targets)
+
+#### 1. Build the Rust framework
 
 ```bash
 make framework    # macOS universal (arm64 + x86_64)
@@ -55,7 +65,7 @@ make framework    # macOS universal (arm64 + x86_64)
 
 This compiles the Mihomo Rust FFI into `Framework/MihomoCore.xcframework`.
 
-### 2. Configure signing
+#### 2. Configure signing
 
 Copy the template and set your Apple development team ID:
 
@@ -67,12 +77,10 @@ cp Local.xcconfig.template Local.xcconfig
 > **Finding your Team ID:** Apple Developer portal → Membership → Team ID (10-character string, e.g. `AB12CD34EF`).
 
 Both targets require these capabilities (already configured in entitlements):
-- **App Groups** — `group.io.github.baoliandeng.macos`
+- **App Sandbox**
 - **Network Extensions** — Packet Tunnel Provider
 
-If you distribute under a different bundle ID, also update `appGroupIdentifier` and `tunnelBundleIdentifier` in `Shared/Constants.swift` and the matching entitlement files.
-
-### 3. Build and run
+#### 3. Build and run
 
 ```bash
 open BaoLianDeng.xcodeproj
