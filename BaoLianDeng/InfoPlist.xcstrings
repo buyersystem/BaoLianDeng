@@ -1,0 +1,26 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "宝莲灯"
+          }
+        }
+      }
+    },
+    "NSSystemExtensionUsageDescription" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "宝莲灯需要安装系统扩展以创建 VPN 隧道。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

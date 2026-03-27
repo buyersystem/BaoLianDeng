@@ -51,7 +51,7 @@ struct AboutView: View {
             }
 
             Section("License") {
-                Text("Copyright (c) 2026 Max Lv <max.c.lv@gmail.com>")
+                Text(verbatim: "Copyright (c) 2026 Max Lv <max.c.lv@gmail.com>")
                     .font(.caption)
                 Link(destination: URL(string: "https://github.com/madeye/BaoLianDeng/blob/main/LICENSE")!) {
                     Label("MIT License", systemImage: "doc.text")
@@ -63,7 +63,7 @@ struct AboutView: View {
 }
 
 struct InfoRow: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
 
     var body: some View {

@@ -105,8 +105,8 @@ struct TrafficView: View {
                         .foregroundStyle(by: .value("Direction", entry.category))
                     }
                     .chartForegroundStyleScale([
-                        "Upload": Color.blue,
-                        "Download": Color.green,
+                        String(localized: "Upload"): Color.blue,
+                        String(localized: "Download"): Color.green,
                     ])
                     .chartYAxisLabel("MB")
                     .frame(width: chartWidth, height: 200)
@@ -182,7 +182,7 @@ struct TrafficView: View {
                     Circle()
                         .fill(vpnManager.isConnected ? .green : .gray)
                         .frame(width: 8, height: 8)
-                    Text(vpnManager.isConnected ? "Active" : "Inactive")
+                    Text(vpnManager.isConnected ? String(localized: "Active") : String(localized: "Inactive"))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -220,12 +220,12 @@ struct TrafficView: View {
             entries.append(TrafficChartEntry(
                 dayLabel: dayLabel, date: record.date,
                 megabytes: Double(record.proxyUpload) / 1_048_576.0,
-                category: "Upload"
+                category: String(localized: "Upload")
             ))
             entries.append(TrafficChartEntry(
                 dayLabel: dayLabel, date: record.date,
                 megabytes: Double(record.proxyDownload) / 1_048_576.0,
-                category: "Download"
+                category: String(localized: "Download")
             ))
         }
         return entries

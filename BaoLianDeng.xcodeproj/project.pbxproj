@@ -35,6 +35,8 @@
 		D28CFAAD4562ECF087671BE7 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* Constants.swift */; };
 		DFFA836A5DFCC6D3BFF95EB6 /* BaoLianDengApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001 /* BaoLianDengApp.swift */; };
 		EBAC80D31A3CCD3F3C083FDA /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090 /* AppLogger.swift */; };
+		L10100 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B10100 /* Localizable.xcstrings */; };
+		L10101 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B10101 /* InfoPlist.xcstrings */; };
 		F6951B7026A9ABC83EB7A583 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4E02415D2E45FB235C0EF142 /* Cocoa.framework */; };
 /* End PBXBuildFile section */
 
@@ -90,6 +92,8 @@
 		B10060 /* TrafficStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficStore.swift; sourceTree = "<group>"; };
 		B10070 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
 		B10090 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
+		B10100 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		B10101 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -157,6 +161,8 @@
 				B10011 /* Info.plist */,
 				B10012 /* BaoLianDeng.entitlements */,
 				B10010 /* Assets.xcassets */,
+				B10100 /* Localizable.xcstrings */,
+				B10101 /* InfoPlist.xcstrings */,
 				G10009 /* Models */,
 				G10008 /* Views */,
 			);
@@ -293,6 +299,7 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
 			);
 			mainGroup = G10001;
 			packageReferences = (
@@ -314,6 +321,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				9161E23D345558ED5649452F /* Assets.xcassets in Resources */,
+				L10100 /* Localizable.xcstrings in Resources */,
+				L10101 /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,0 +1,1006 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Home" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "首页"
+          }
+        }
+      }
+    },
+    "Config" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置"
+          }
+        }
+      }
+    },
+    "Data" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数据"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
+          }
+        }
+      }
+    },
+    "BaoLianDeng" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "宝莲灯"
+          }
+        }
+      }
+    },
+    "Subscriptions" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "订阅"
+          }
+        }
+      }
+    },
+    "Network Extension Enabled" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络扩展已启用"
+          }
+        }
+      }
+    },
+    "Enable Network Extension" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用网络扩展"
+          }
+        }
+      }
+    },
+    "System Settings has been opened.\n\nPlease go to Network Extensions and toggle on BaoLianDeng to enable the VPN." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统设置已打开。\n\n请前往网络扩展并开启宝莲灯以启用 VPN。"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好"
+          }
+        }
+      }
+    },
+    "Routing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "路由"
+          }
+        }
+      }
+    },
+    "No Subscriptions" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无订阅"
+          }
+        }
+      }
+    },
+    "Tap + to add a subscription URL" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点击 + 添加订阅链接"
+          }
+        }
+      }
+    },
+    "%lld nodes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个节点"
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除"
+          }
+        }
+      }
+    },
+    "Edit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑"
+          }
+        }
+      }
+    },
+    "Reload Complete" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新完成"
+          }
+        }
+      }
+    },
+    "Subscription Info" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "订阅信息"
+          }
+        }
+      }
+    },
+    "Name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称"
+          }
+        }
+      }
+    },
+    "URL" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "链接"
+          }
+        }
+      }
+    },
+    "Enter a subscription URL to import proxy nodes. Supported formats: Clash YAML, base64-encoded links." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入订阅链接以导入代理节点。支持格式：Clash YAML、Base64 编码链接。"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "Add" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加"
+          }
+        }
+      }
+    },
+    "Add Subscription" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加订阅"
+          }
+        }
+      }
+    },
+    "Edit Subscription" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑订阅"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
+    "Connected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已连接"
+          }
+        }
+      }
+    },
+    "Connecting..." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接中..."
+          }
+        }
+      }
+    },
+    "Disconnecting..." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开中..."
+          }
+        }
+      }
+    },
+    "Not Connected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未连接"
+          }
+        }
+      }
+    },
+    "Reconnecting..." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新连接中..."
+          }
+        }
+      }
+    },
+    "Not Configured" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未配置"
+          }
+        }
+      }
+    },
+    "Unknown" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知"
+          }
+        }
+      }
+    },
+    "Rule" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规则"
+          }
+        }
+      }
+    },
+    "Global" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局"
+          }
+        }
+      }
+    },
+    "Direct" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直连"
+          }
+        }
+      }
+    },
+    "Active" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "活跃"
+          }
+        }
+      }
+    },
+    "Inactive" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未活跃"
+          }
+        }
+      }
+    },
+    "Local Config" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地配置"
+          }
+        }
+      }
+    },
+    "Source" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来源"
+          }
+        }
+      }
+    },
+    "Proxy Groups" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理组"
+          }
+        }
+      }
+    },
+    "Rules (%lld)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规则 (%lld)"
+          }
+        }
+      }
+    },
+    "Reset Default" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复默认"
+          }
+        }
+      }
+    },
+    "Error" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "错误"
+          }
+        }
+      }
+    },
+    "Saved" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存"
+          }
+        }
+      }
+    },
+    "Group Info" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分组信息"
+          }
+        }
+      }
+    },
+    "Type" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "类型"
+          }
+        }
+      }
+    },
+    "Test URL" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "测试链接"
+          }
+        }
+      }
+    },
+    "Interval" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "间隔"
+          }
+        }
+      }
+    },
+    "Proxies (%lld)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理 (%lld)"
+          }
+        }
+      }
+    },
+    "Add proxy name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加代理名称"
+          }
+        }
+      }
+    },
+    "Group Name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分组名称"
+          }
+        }
+      }
+    },
+    "Add Proxy Group" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加代理组"
+          }
+        }
+      }
+    },
+    "Add Rule" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加规则"
+          }
+        }
+      }
+    },
+    "Target" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标"
+          }
+        }
+      }
+    },
+    "MATCH (catch-all)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MATCH（全匹配）"
+          }
+        }
+      }
+    },
+    "Value" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "值"
+          }
+        }
+      }
+    },
+    "Current Session (Proxy Only)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前会话（仅代理）"
+          }
+        }
+      }
+    },
+    "Upload" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上传"
+          }
+        }
+      }
+    },
+    "Download" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载"
+          }
+        }
+      }
+    },
+    "Total" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "总计"
+          }
+        }
+      }
+    },
+    "Daily Proxy Traffic (Last 30 Days)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每日代理流量（近 30 天）"
+          }
+        }
+      }
+    },
+    "No Data" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无数据"
+          }
+        }
+      }
+    },
+    "Traffic data will appear here when VPN is active" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VPN 连接后将在此显示流量数据"
+          }
+        }
+      }
+    },
+    "Direction" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "方向"
+          }
+        }
+      }
+    },
+    "Monthly Summary" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月度汇总"
+          }
+        }
+      }
+    },
+    "Usage by Subscription" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按订阅统计用量"
+          }
+        }
+      }
+    },
+    "Status" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态"
+          }
+        }
+      }
+    },
+    "Connection" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接"
+          }
+        }
+      }
+    },
+    "Active Connections" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "活跃连接"
+          }
+        }
+      }
+    },
+    "%lld proxy / %lld total" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 代理 / %lld 总计"
+          }
+        }
+      }
+    },
+    "No Usage Data" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无用量数据"
+          }
+        }
+      }
+    },
+    "Connect the VPN to start attributing traffic to subscriptions" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接 VPN 后开始统计各订阅的流量"
+          }
+        }
+      }
+    },
+    "Reset" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置"
+          }
+        }
+      }
+    },
+    "Reset all subscription usage data?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置所有订阅用量数据？"
+          }
+        }
+      }
+    },
+    "Reset All" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部重置"
+          }
+        }
+      }
+    },
+    "This will permanently clear the usage counters for all subscriptions." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将永久清除所有订阅的用量计数。"
+          }
+        }
+      }
+    },
+    "General" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通用"
+          }
+        }
+      }
+    },
+    "Log Level" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日志级别"
+          }
+        }
+      }
+    },
+    "Silent" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静默"
+          }
+        }
+      }
+    },
+    "Warning" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "警告"
+          }
+        }
+      }
+    },
+    "Info" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信息"
+          }
+        }
+      }
+    },
+    "Debug" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调试"
+          }
+        }
+      }
+    },
+    "Tunnel Log" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隧道日志"
+          }
+        }
+      }
+    },
+    "About" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于"
+          }
+        }
+      }
+    },
+    "About BaoLianDeng" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于宝莲灯"
+          }
+        }
+      }
+    },
+    "Global Proxy powered by Mihomo" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基于 Mihomo 的全局代理"
+          }
+        }
+      }
+    },
+    "Information" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信息"
+          }
+        }
+      }
+    },
+    "Version" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本"
+          }
+        }
+      }
+    },
+    "Build" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "构建号"
+          }
+        }
+      }
+    },
+    "Links" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "链接"
+          }
+        }
+      }
+    },
+    "Source Code" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "源代码"
+          }
+        }
+      }
+    },
+    "Mihomo Documentation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mihomo 文档"
+          }
+        }
+      }
+    },
+    "License" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "许可证"
+          }
+        }
+      }
+    },
+    "MIT License" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MIT 许可证"
+          }
+        }
+      }
+    },
+    "No log yet — toggle the VPN to generate logs." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无日志 - 开启 VPN 后将生成日志。"
+          }
+        }
+      }
+    },
+    "Fetched %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已获取 %@"
+          }
+        }
+      }
+    },
+    "Failed to fetch %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取 %@ 失败"
+          }
+        }
+      }
+    },
+    "Invalid: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无效：%@"
+          }
+        }
+      }
+    },
+    "Updated %@ (%lld nodes)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已更新 %@（%lld 个节点）"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

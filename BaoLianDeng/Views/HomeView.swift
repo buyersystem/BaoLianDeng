@@ -175,7 +175,7 @@ struct HomeView: View {
             } label: {
                 HStack {
                     Image(systemName: vpnManager.extensionEnabled ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                    Text(vpnManager.extensionEnabled ? "Network Extension Enabled" : "Enable Network Extension")
+                    Text(vpnManager.extensionEnabled ? String(localized: "Network Extension Enabled") : String(localized: "Enable Network Extension"))
                         .font(.subheadline)
                 }
                 .foregroundStyle(vpnManager.extensionEnabled ? .green : .orange)
@@ -304,13 +304,13 @@ struct HomeView: View {
 
     private var statusText: String {
         switch vpnManager.status {
-        case .connected: return "Connected"
-        case .connecting: return "Connecting..."
-        case .disconnecting: return "Disconnecting..."
-        case .disconnected: return "Not Connected"
-        case .reasserting: return "Reconnecting..."
-        case .invalid: return "Not Configured"
-        @unknown default: return "Unknown"
+        case .connected: return String(localized: "Connected")
+        case .connecting: return String(localized: "Connecting...")
+        case .disconnecting: return String(localized: "Disconnecting...")
+        case .disconnected: return String(localized: "Not Connected")
+        case .reasserting: return String(localized: "Reconnecting...")
+        case .invalid: return String(localized: "Not Configured")
+        @unknown default: return String(localized: "Unknown")
         }
     }
 
@@ -419,7 +419,7 @@ struct HomeView: View {
                 do {
                     let result = try await fetchSubscription(from: url)
                     if let validationError = ConfigManager.shared.validateSubscriptionConfig(result.raw) {
-                        displayToast("Invalid: \(validationError)")
+                        displayToast(String(format: String(localized: "Invalid: %@"), validationError))
                         AppLogger.ui.error("Validation failed for \(name, privacy: .public): \(validationError, privacy: .public)")
                         return
                     }
@@ -431,9 +431,9 @@ struct HomeView: View {
                     if let i = subscriptions.firstIndex(where: { $0.id == id }) {
                         selectSubscription(subscriptions[i])
                     }
-                    displayToast("Fetched \(name)")
+                    displayToast(String(format: String(localized: "Fetched %@"), name))
                 } catch {
-                    displayToast("Failed to fetch \(name)")
+                    displayToast(String(format: String(localized: "Failed to fetch %@"), name))
                 }
             }
         }
@@ -463,7 +463,7 @@ struct HomeView: View {
                     if let i = subscriptions.firstIndex(where: { $0.id == id }) {
                         subscriptions[i].isUpdating = false
                     }
-                    displayToast("Invalid: \(validationError)")
+                    displayToast(String(format: String(localized: "Invalid: %@"), validationError))
                     return
                 }
                 if let i = subscriptions.firstIndex(where: { $0.id == id }) {
@@ -477,12 +477,12 @@ struct HomeView: View {
                     let merged = (try? ConfigManager.shared.applySubscriptionConfig(result.raw)) ?? ""
                     await Self.reloadMihomoConfig(with: merged)
                 }
-                displayToast("Updated \(name) (\(result.nodes.count) nodes)")
+                displayToast(String(format: String(localized: "Updated %@ (%lld nodes)"), name, result.nodes.count))
             } catch {
                 if let i = subscriptions.firstIndex(where: { $0.id == id }) {
                     subscriptions[i].isUpdating = false
                 }
-                displayToast("Failed to fetch \(name)")
+                displayToast(String(format: String(localized: "Failed to fetch %@"), name))
             }
         }
     }

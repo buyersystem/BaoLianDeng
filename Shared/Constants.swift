@@ -47,9 +47,9 @@ enum ProxyMode: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .rule: return "Rule"
-        case .global: return "Global"
-        case .direct: return "Direct"
+        case .rule: return String(localized: "Rule")
+        case .global: return String(localized: "Global")
+        case .direct: return String(localized: "Direct")
         }
     }
 }

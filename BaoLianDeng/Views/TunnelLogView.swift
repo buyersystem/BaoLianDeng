@@ -16,7 +16,7 @@
 import SwiftUI
 
 struct TunnelLogView: View {
-    @State private var logText = "No log yet — toggle the VPN to generate logs."
+    @State private var logText = String(localized: "No log yet — toggle the VPN to generate logs.")
     @State private var autoRefresh = true
     private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
