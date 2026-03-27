@@ -140,8 +140,9 @@ final class VPNManager: NSObject, ObservableObject {
                 self?.isProcessing = false
             }
             if connection.status == .connected {
-                // Full config (with subscription) was already passed via providerConfiguration.
-                // Just select the saved proxy node via REST API.
+                #if canImport(SystemExtensions)
+                self?.extensionInstalled = true
+                #endif
                 self?.selectSavedProxyNode()
             }
             if connection.status == .disconnected {
@@ -452,6 +453,10 @@ extension VPNManager: OSSystemExtensionRequestDelegate {
     func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
         let nsError = error as NSError
         dbg("didFail: \(error.localizedDescription) domain=\(nsError.domain) code=\(nsError.code)")
+        // requestSuperseded (code 4) means extension is already active
+        if nsError.domain == "OSSystemExtensionErrorDomain" && nsError.code == 4 {
+            DispatchQueue.main.async { self.extensionInstalled = true }
+        }
         loadManager()
     }
 

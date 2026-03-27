@@ -158,6 +158,26 @@ struct HomeView: View {
                     .foregroundStyle(.red)
             }
 
+            #if canImport(SystemExtensions)
+            if !vpnManager.extensionInstalled {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                    Text("Network extension not enabled")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Enable") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+            #endif
+
             Picker("Routing", selection: $selectedMode) {
                 ForEach(ProxyMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
