@@ -1,3 +1,0 @@
-[submodule "Rust/mihomo"]
-	path = Rust/mihomo
-	url = https://github.com/madeye/mihomo-rust.git
