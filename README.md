@@ -50,7 +50,7 @@ macOS VPN proxy app powered by [Mihomo](https://github.com/MetaCubeX/mihomo) (Cl
 1. Download the latest DMG from [Releases](https://github.com/madeye/BaoLianDeng/releases/latest)
 2. Open the DMG and drag **BaoLianDeng** to **Applications**
 3. Launch from Applications
-4. Allow the system extension when prompted
+4. Enable the network extension: **System Settings → General → Login Items & Extensions → Network Extensions** → toggle on **BaoLianDeng**
 
 The DMG is signed with Developer ID and notarized by Apple.
 
