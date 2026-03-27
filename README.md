@@ -12,6 +12,7 @@ macOS VPN proxy app powered by [Mihomo](https://github.com/MetaCubeX/mihomo) (Cl
 - **Config Editor** — In-app YAML editor with validation for both local config and subscription configs
 - **Proxy Groups** — View and switch proxy groups via Mihomo's REST API
 - **Tunnel Logs** — Real-time log viewer for debugging the network extension
+- **Localization** — English and Simplified Chinese (zh-Hans)
 
 ## Architecture
 
