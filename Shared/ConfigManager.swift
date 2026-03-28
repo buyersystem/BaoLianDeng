@@ -348,7 +348,7 @@ final class ConfigManager {
                   let type = group["type"] as? String else { continue }
             pgSection += "\n  - name: \(name)\n    type: \(type)"
             if let url = group["url"] as? String { pgSection += "\n    url: \(url)" }
-            if let interval = group["interval"] as? Int { pgSection += "\n    interval: \(interval)" }
+            if let interval = group["interval"] as? Int { pgSection += "\n    interval: 0" }
             let proxies = group["proxies"] as? [String] ?? []
             if proxies.isEmpty {
                 pgSection += "\n    proxies: []"
@@ -359,15 +359,27 @@ final class ConfigManager {
         }
         result += "\n\n" + pgSection
 
-        // Add subscription providers (raw pass-through)
-        if let pp = sub["proxy-providers"] { result += "\n\n" + pp }
-        if let rp = sub["rule-providers"] { result += "\n\n" + rp }
+        // Add subscription providers with auto-refresh disabled
+        if let pp = sub["proxy-providers"] { result += "\n\n" + Self.disableProviderRefresh(pp) }
+        if let rp = sub["rule-providers"] { result += "\n\n" + Self.disableProviderRefresh(rp) }
 
         // Overwrite rules (fall back to default rules if subscription has none)
         let defaultRules = extractYAMLSections(from: defaultConfig, named: ["rules"])
         result += "\n\n" + (sub["rules"] ?? defaultRules["rules"] ?? "rules:\n  - MATCH,DIRECT")
 
         return result
+    }
+
+    /// Set interval to 0 in provider sections so Mihomo won't auto-refresh subscription URLs.
+    static func disableProviderRefresh(_ section: String) -> String {
+        section.components(separatedBy: "\n").map { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("interval:") {
+                let indent = line.prefix(while: { $0 == " " || $0 == "\t" })
+                return indent + "interval: 0"
+            }
+            return line
+        }.joined(separator: "\n")
     }
 
     /// Extract top-level YAML sections by name.

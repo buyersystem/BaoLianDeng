@@ -35,24 +35,18 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
+            ScrollViewReader { proxy in
                 List {
                     connectSection
-                }
-                .scrollDisabled(false)
-                .frame(height: vpnManager.errorMessage != nil ? 185 : 155)
 
-                ScrollViewReader { proxy in
-                    List {
-                        Section(header:
-                            Text("Subscriptions")
-                                .id("subscriptionsTop")
-                        ) {
-                            subscriptionSections
-                        }
+                    Section(header:
+                        Text("Subscriptions")
+                            .id("subscriptionsTop")
+                    ) {
+                        subscriptionSections
                     }
-                    .onAppear { scrollProxy = proxy }
                 }
+                .onAppear { scrollProxy = proxy }
             }
             .navigationTitle("BaoLianDeng")
             .onTapGesture(count: 2) {
