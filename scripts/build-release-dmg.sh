@@ -121,6 +121,10 @@ rm -rf "$DMG_DIR"
 MOUNT_POINT=$(hdiutil attach -readwrite -noverify "$RW_DMG" | grep "/Volumes/" | tail -1 | awk -F'\t' '{print $NF}')
 echo "Mounted at: $MOUNT_POINT"
 
+# Copy background image into DMG
+mkdir -p "${MOUNT_POINT}/.background"
+cp "${PROJECT_DIR}/scripts/dmg-background.png" "${MOUNT_POINT}/.background/dmg-background.png"
+
 # Set Finder window appearance: icon size, background, icon positions
 osascript <<APPLESCRIPT
 tell application "Finder"
@@ -133,7 +137,7 @@ tell application "Finder"
         set viewOptions to the icon view options of container window
         set arrangement of viewOptions to not arranged
         set icon size of viewOptions to 128
-        set background color of viewOptions to {65535, 65535, 65535}
+        set background picture of viewOptions to POSIX file "${MOUNT_POINT}/.background/dmg-background.png"
         set position of item "${APP_NAME}.app" of container window to {120, 150}
         set position of item "Applications" of container window to {420, 150}
         close

@@ -15,7 +15,9 @@
 
 import NetworkExtension
 import MihomoCore
+import Network
 import os
+import Yams
 
 class PacketTunnelProvider: NEPacketTunnelProvider {
     private var proxyStarted = false
@@ -63,12 +65,20 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         ConfigManager.shared.sanitizeConfig()
         log("Config sanitized")
 
+        // Pre-resolve proxy server hostnames to IPs while DNS still works
+        // (before TUN routes take effect). This serves two purposes:
+        // 1. The resolved IPs are excluded from TUN routes to avoid loops
+        // 2. Hostnames in config are replaced with IPs so the proxy adapter
+        //    connects directly without needing DNS at runtime
+        let resolvedIPs = preResolveProxyServers(configPath: configPath)
+        log("Pre-resolved \(resolvedIPs.count) proxy server IP(s)")
+
         // Log config summary for debugging
         if let cfg = try? String(contentsOfFile: configPath, encoding: .utf8) {
             log("config.yaml preview: \(String(cfg.prefix(300)))")
         }
 
-        let settings = createTunnelSettings()
+        let settings = createTunnelSettings(proxyServerIPs: resolvedIPs)
         log("Setting tunnel network settings")
 
         setTunnelNetworkSettings(settings) { [weak self] error in
@@ -224,7 +234,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     // MARK: - TUN Configuration
 
-    private func createTunnelSettings() -> NEPacketTunnelNetworkSettings {
+    private func createTunnelSettings(proxyServerIPs: Set<String> = []) -> NEPacketTunnelNetworkSettings {
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "254.1.1.1")
 
         // IPv4 - route all traffic through the tunnel
@@ -233,11 +243,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             subnetMasks: [AppConstants.tunSubnetMask]
         )
         ipv4.includedRoutes = [NEIPv4Route.default()]
-        // Exclude localhost so the extension's own outbound connections
-        // (SOCKS5 to 127.0.0.1:7890, DNS to 127.0.0.1:1053) don't loop back through TUN
-        ipv4.excludedRoutes = [
+        // Exclude localhost and proxy server IPs so the proxy engine's
+        // outbound connections to upstream servers bypass the TUN.
+        var excluded = [
             NEIPv4Route(destinationAddress: "127.0.0.0", subnetMask: "255.0.0.0"),
         ]
+        for ip in proxyServerIPs {
+            excluded.append(NEIPv4Route(destinationAddress: ip, subnetMask: "255.255.255.255"))
+        }
+        ipv4.excludedRoutes = excluded
         settings.ipv4Settings = ipv4
 
         // IPv6 - route all IPv6 traffic through the tunnel
@@ -324,6 +338,82 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         timer.resume()
         diagnosticTimer = timer
+    }
+
+    /// Pre-resolve proxy server hostnames to IPs and rewrite the config.
+    /// Must be called BEFORE TUN routes take effect (while DNS still uses
+    /// the physical interface). Returns the set of resolved IPs for route exclusion.
+    private func preResolveProxyServers(configPath: String) -> Set<String> {
+        guard var yaml = try? String(contentsOfFile: configPath, encoding: .utf8) else { return [] }
+
+        // Parse proxy entries to find server hostnames
+        guard let dict = (try? Yams.load(yaml: yaml)) as? [String: Any],
+              let proxies = dict["proxies"] as? [[String: Any]] else {
+            return []
+        }
+
+        // Collect unique hostnames (skip raw IPs)
+        var hostToIP: [String: String] = [:]
+        var allIPs = Set<String>()
+        for proxy in proxies {
+            guard let server = proxy["server"] as? String, !server.isEmpty else { continue }
+            if server.contains(":") { continue } // skip IPv6
+            if let _ = IPv4Address(server) {
+                allIPs.insert(server)
+                continue
+            }
+            if hostToIP[server] != nil { continue } // already resolved
+
+            // Resolve hostname synchronously (OK because TUN isn't active yet)
+            if let ip = resolveHostnameToIPv4(server) {
+                hostToIP[server] = ip
+                allIPs.insert(ip)
+                log("Resolved proxy server: \(server) -> \(ip)")
+            }
+        }
+
+        // Rewrite config: replace hostnames with resolved IPs in proxy entries
+        // so the Trojan/SS adapter connects to IPs directly (no DNS at runtime)
+        if !hostToIP.isEmpty {
+            for (hostname, ip) in hostToIP {
+                yaml = yaml.replacingOccurrences(
+                    of: "server: \(hostname)",
+                    with: "server: \(ip)"
+                )
+                // Also handle quoted forms
+                yaml = yaml.replacingOccurrences(
+                    of: "server: '\(hostname)'",
+                    with: "server: '\(ip)'"
+                )
+                yaml = yaml.replacingOccurrences(
+                    of: "server: \"\(hostname)\"",
+                    with: "server: \"\(ip)\""
+                )
+            }
+            try? yaml.write(toFile: configPath, atomically: true, encoding: .utf8)
+            log("Config rewritten with \(hostToIP.count) resolved proxy server IP(s)")
+        }
+
+        return allIPs
+    }
+
+    /// Resolve a hostname to its first IPv4 address using CFHost (synchronous).
+    private func resolveHostnameToIPv4(_ hostname: String) -> String? {
+        let hostRef = CFHostCreateWithName(nil, hostname as CFString).takeRetainedValue()
+        var resolved = DarwinBoolean(false)
+        CFHostStartInfoResolution(hostRef, .addresses, nil)
+        guard let addresses = CFHostGetAddressing(hostRef, &resolved)?.takeUnretainedValue() as? [Data] else {
+            return nil
+        }
+        for addrData in addresses {
+            guard addrData.count >= MemoryLayout<sockaddr_in>.size else { continue }
+            var addr = sockaddr_in()
+            _ = withUnsafeMutableBytes(of: &addr) { addrData.copyBytes(to: $0) }
+            if addr.sin_family == UInt8(AF_INET) {
+                return String(cString: inet_ntoa(addr.sin_addr))
+            }
+        }
+        return nil
     }
 
     private func responseData(_ dict: [String: Any]) -> Data? {

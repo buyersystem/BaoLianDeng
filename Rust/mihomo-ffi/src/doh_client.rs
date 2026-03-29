@@ -5,8 +5,16 @@ use crate::logging;
 use std::sync::OnceLock;
 use tracing::{info, warn};
 
-const DEFAULT_DOH_URL: &str = "https://1.1.1.1/dns-query";
 const DOH_TIMEOUT_SECS: u64 = 5;
+
+/// IP-based DoH servers that don't require DNS resolution.
+/// These are always appended as fallbacks to avoid circular DNS dependency
+/// when hostname-based DoH servers (e.g. dns.alidns.com) become unreachable
+/// after the system DNS cache expires under the TUN.
+const IP_BASED_DOH_URLS: &[&str] = &[
+    "https://1.1.1.1/dns-query",
+    "https://8.8.8.8/dns-query",
+];
 
 struct DohClient {
     http_client: reqwest::Client,
@@ -98,7 +106,7 @@ fn read_doh_urls_from_config() -> Vec<String> {
         Some(dir) => format!("{}/config.yaml", dir),
         None => {
             info!("DoH: no HOME_DIR, using default URL");
-            return vec![DEFAULT_DOH_URL.to_string()];
+            return IP_BASED_DOH_URLS.iter().map(|s| s.to_string()).collect();
         }
     };
     drop(home_dir); // release lock before I/O
@@ -107,7 +115,7 @@ fn read_doh_urls_from_config() -> Vec<String> {
         Ok(s) => s,
         Err(e) => {
             warn!("DoH: cannot read {}: {}", config_path, e);
-            return vec![DEFAULT_DOH_URL.to_string()];
+            return IP_BASED_DOH_URLS.iter().map(|s| s.to_string()).collect();
         }
     };
 
@@ -115,7 +123,7 @@ fn read_doh_urls_from_config() -> Vec<String> {
         Ok(c) => c,
         Err(e) => {
             warn!("DoH: cannot parse config: {}", e);
-            return vec![DEFAULT_DOH_URL.to_string()];
+            return IP_BASED_DOH_URLS.iter().map(|s| s.to_string()).collect();
         }
     };
 
@@ -135,9 +143,15 @@ fn read_doh_urls_from_config() -> Vec<String> {
         }
     }
 
-    if urls.is_empty() {
-        info!("DoH: no https:// URLs in config, using default");
-        urls.push(DEFAULT_DOH_URL.to_string());
+    // Always append IP-based DoH servers as fallbacks.
+    // Hostname-based servers (dns.alidns.com, doh.pub) stop working once the
+    // system DNS cache expires because resolving them requires DoH, which
+    // requires resolving them — a circular dependency under the TUN.
+    for fallback in IP_BASED_DOH_URLS {
+        let s = fallback.to_string();
+        if !urls.contains(&s) {
+            urls.push(s);
+        }
     }
 
     urls

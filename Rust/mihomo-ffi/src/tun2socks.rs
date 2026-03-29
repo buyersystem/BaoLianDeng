@@ -6,7 +6,7 @@
 use crate::dns_table;
 use crate::doh_client;
 use crate::logging;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::os::raw::c_void;
@@ -22,7 +22,7 @@ use tracing::{debug, info};
 use smoltcp::iface::{Config, Interface, Route, SocketHandle, SocketSet};
 use smoltcp::phy::{self, Device, DeviceCapabilities, Medium};
 use smoltcp::socket::tcp as smol_tcp;
-use smoltcp::time::Instant as SmolInstant;
+use smoltcp::time::{Duration as SmolDuration, Instant as SmolInstant};
 use smoltcp::wire::{HardwareAddress, IpAddress, IpCidr, IpListenEndpoint};
 
 // ---------------------------------------------------------------------------
@@ -210,9 +210,9 @@ impl<'a> phy::TxToken for TunTxToken<'a> {
 // Connection tracking
 // ---------------------------------------------------------------------------
 
-const MAX_SOCKETS: usize = 512;
+const MAX_SOCKETS: usize = 256;
 const SOCKET_RX_BUF: usize = 65535;
-const SOCKET_TX_BUF: usize = 65535;
+const SOCKET_TX_BUF: usize = 262144; // 256KB — needed for high-throughput downloads
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum ConnState {
@@ -227,7 +227,18 @@ struct ConnInfo {
     dst_ip: u32,
     dst_port: u16,
     state: ConnState,
+    /// Instant when the socket entered its current state (for timeout-based reaping)
+    state_since: Instant,
+    /// Pending data from SOCKS5 that couldn't be written to smoltcp yet (backpressure buffer)
+    pending_write: Vec<u8>,
 }
+
+/// How long a Listening socket can wait for a SYN match before being recycled.
+const LISTEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+/// How long an Established socket can sit in a closing TCP state before being reaped.
+const CLOSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+/// Max pending write buffer per connection (4 MB) — prevents OOM under sustained backpressure.
+const MAX_PENDING_WRITE: usize = 4 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Packet thread (replaces lwip_thread)
@@ -262,11 +273,14 @@ async fn packet_loop(
     for _ in 0..MAX_SOCKETS {
         let rx_buf = smol_tcp::SocketBuffer::new(vec![0u8; SOCKET_RX_BUF]);
         let tx_buf = smol_tcp::SocketBuffer::new(vec![0u8; SOCKET_TX_BUF]);
-        let socket = smol_tcp::Socket::new(rx_buf, tx_buf);
+        let mut socket = smol_tcp::Socket::new(rx_buf, tx_buf);
+        socket.set_keep_alive(Some(SmolDuration::from_secs(30)));
         let handle = sockets.add(socket);
         conns.push(ConnInfo {
             handle,
             conn_id: 0,
+            state_since: Instant::now(),
+            pending_write: Vec::new(),
             dst_ip: 0,
             dst_port: 0,
             state: ConnState::Free,
@@ -302,6 +316,8 @@ async fn packet_loop(
     let mut socks_data_dropped: u64 = 0;
     let mut last_stats = Instant::now();
     let start_time = Instant::now();
+    // Track recycled conn_ids so we silently skip stale SocksEvent data
+    let mut dead_conns: HashSet<u64> = HashSet::new();
 
     // Main loop — wait for fd readable or SOCKS events via tokio::select!
     loop {
@@ -454,11 +470,14 @@ async fn packet_loop(
                         let _ = tun_tx.send(TunEvent::TcpClosed {
                             conn_id: ci.conn_id,
                         });
+                        dead_conns.insert(ci.conn_id);
                         s.abort();
                         ci.state = ConnState::Free;
+                        ci.state_since = Instant::now();
                         ci.conn_id = 0;
                         ci.dst_ip = 0;
                         ci.dst_port = 0;
+                        ci.pending_write.clear();
                     }
                 }
                 // Find a free socket and listen on dst_port
@@ -475,6 +494,7 @@ async fn packet_loop(
                             ci.dst_ip = dst_ip;
                             ci.dst_port = dst_port;
                             ci.state = ConnState::Listening;
+                            ci.state_since = Instant::now();
                             listens_set += 1;
                             if listens_set <= 3 {
                                 logging::bridge_log(&format!(
@@ -523,6 +543,7 @@ async fn packet_loop(
                         smol_tcp::State::Established => {
                             // 3-way handshake complete
                             ci.state = ConnState::Established;
+                            ci.state_since = Instant::now();
                             active_conns += 1;
                             let dst = Ipv4Addr::from(ci.dst_ip.to_ne_bytes());
                             logging::bridge_log(&format!(
@@ -546,6 +567,7 @@ async fn packet_loop(
                             // Closed, TimeWait, or other terminal state — recycle
                             socket.abort();
                             ci.state = ConnState::Free;
+                            ci.state_since = Instant::now();
                             ci.conn_id = 0;
                         }
                     }
@@ -565,11 +587,14 @@ async fn packet_loop(
                         let _ = tun_tx.send(TunEvent::TcpClosed {
                             conn_id: ci.conn_id,
                         });
+                        dead_conns.insert(ci.conn_id);
                         socket.abort();
                         ci.state = ConnState::Free;
+                        ci.state_since = Instant::now();
                         ci.conn_id = 0;
                         ci.dst_ip = 0;
                         ci.dst_port = 0;
+                        ci.pending_write.clear();
                         continue;
                     }
                     active_conns += 1;
@@ -597,25 +622,43 @@ async fn packet_loop(
             }
         }
 
-        // 5. Process events from tokio (SOCKS5 responses)
+        // 5. Drain pending writes from previous iterations (backpressure retry)
+        for ci in conns.iter_mut().filter(|c| c.state == ConnState::Established && !c.pending_write.is_empty()) {
+            let socket = sockets.get_mut::<smol_tcp::Socket>(ci.handle);
+            if socket.can_send() {
+                match socket.send_slice(&ci.pending_write) {
+                    Ok(n) => {
+                        socks_data_sent += n as u64;
+                        ci.pending_write.drain(..n);
+                    }
+                    Err(_) => {
+                        // Will retry next iteration
+                    }
+                }
+            }
+        }
+
+        // 6. Process events from tokio (SOCKS5 responses)
         // First handle any event captured by select!, then drain remaining
         if let Some(event) = got_socks_event {
             process_socks_event(
-                event, fd, &conns, &mut sockets,
+                event, fd, &mut conns, &mut sockets,
                 &mut socks_data_recv, &mut socks_data_sent, &mut socks_data_dropped,
+                &dead_conns,
             );
         }
         while let Ok(event) = socks_rx.try_recv() {
             process_socks_event(
-                event, fd, &conns, &mut sockets,
+                event, fd, &mut conns, &mut sockets,
                 &mut socks_data_recv, &mut socks_data_sent, &mut socks_data_dropped,
+                &dead_conns,
             );
         }
 
-        // 6. Poll again to flush data written to sockets in step 5
+        // 7. Poll again to flush data written to sockets in steps 5-6
         iface.poll(smol_now, &mut device, &mut sockets);
 
-        // 7. Drain TX queue — write smoltcp output packets to utun fd
+        // 8. Drain TX queue — write smoltcp output packets to utun fd
         static TX_LOG_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         while let Some(pkt) = device.tx_queue.pop_front() {
             if pkt.is_empty() {
@@ -663,11 +706,76 @@ async fn packet_loop(
             }
         }
 
-        // 8. Periodic stats
-        if last_stats.elapsed() >= std::time::Duration::from_secs(5) {
+        // 9. Reap stale sockets
+        let now = Instant::now();
+        let mut reaped = 0u32;
+        for ci in conns.iter_mut() {
+            match ci.state {
+                ConnState::Listening => {
+                    // Listening socket that never got a SYN match
+                    if now.duration_since(ci.state_since) >= LISTEN_TIMEOUT {
+                        let socket = sockets.get_mut::<smol_tcp::Socket>(ci.handle);
+                        socket.abort();
+                        ci.state = ConnState::Free;
+                        ci.state_since = now;
+                        ci.conn_id = 0;
+                        ci.dst_ip = 0;
+                        ci.dst_port = 0;
+                        ci.pending_write.clear();
+                        reaped += 1;
+                    }
+                }
+                ConnState::Established => {
+                    let socket = sockets.get_mut::<smol_tcp::Socket>(ci.handle);
+                    let tcp_state = socket.state();
+                    // Sockets stuck in closing states (FinWait1/2, CloseWait, etc.)
+                    let is_closing = matches!(
+                        tcp_state,
+                        smol_tcp::State::FinWait1
+                            | smol_tcp::State::FinWait2
+                            | smol_tcp::State::CloseWait
+                            | smol_tcp::State::Closing
+                            | smol_tcp::State::LastAck
+                            | smol_tcp::State::TimeWait
+                    );
+                    if is_closing && now.duration_since(ci.state_since) >= CLOSE_TIMEOUT {
+                        let _ = tun_tx.send(TunEvent::TcpClosed {
+                            conn_id: ci.conn_id,
+                        });
+                        dead_conns.insert(ci.conn_id);
+                        socket.abort();
+                        ci.state = ConnState::Free;
+                        ci.state_since = now;
+                        ci.conn_id = 0;
+                        ci.dst_ip = 0;
+                        ci.dst_port = 0;
+                        ci.pending_write.clear();
+                        reaped += 1;
+                    }
+                }
+                ConnState::Free => {}
+            }
+        }
+        if reaped > 0 {
+            let free_count = conns.iter().filter(|c| c.state == ConnState::Free).count();
             logging::bridge_log(&format!(
-                "STATS: rx={} udp={} tcp={} conns={} tx_pkts={} tx_bytes={} socks_recv={} socks_sent={} socks_drop={}",
-                pkt_total, pkt_udp, pkt_tcp, active_conns, tx_pkt_count, tx_byte_count,
+                "REAPER: recycled {} stale sockets ({} free / {} total)",
+                reaped, free_count, MAX_SOCKETS
+            ));
+        }
+
+        // 10. Periodic cleanup and stats
+        if last_stats.elapsed() >= std::time::Duration::from_secs(5) {
+            // Purge dead_conns — any orphan events still in the channel after 5s
+            // are gone; conn_ids are monotonically increasing so no reuse risk.
+            dead_conns.clear();
+            let free_count = conns.iter().filter(|c| c.state == ConnState::Free).count();
+            let listen_count = conns.iter().filter(|c| c.state == ConnState::Listening).count();
+            let pending_total: usize = conns.iter().map(|c| c.pending_write.len()).sum();
+            logging::bridge_log(&format!(
+                "STATS: rx={} udp={} tcp={} conns={} free={} listen={} pending={}B tx_pkts={} tx_bytes={} socks_recv={} socks_sent={} socks_drop={}",
+                pkt_total, pkt_udp, pkt_tcp, active_conns, free_count, listen_count,
+                pending_total, tx_pkt_count, tx_byte_count,
                 socks_data_recv, socks_data_sent, socks_data_dropped
             ));
             last_stats = Instant::now();
@@ -682,42 +790,50 @@ async fn packet_loop(
 fn process_socks_event(
     event: SocksEvent,
     fd: RawFd,
-    conns: &[ConnInfo],
+    conns: &mut [ConnInfo],
     sockets: &mut SocketSet,
     socks_data_recv: &mut u64,
     socks_data_sent: &mut u64,
     socks_data_dropped: &mut u64,
+    dead_conns: &HashSet<u64>,
 ) {
     match event {
         SocksEvent::TcpData { conn_id, data } => {
+            // Skip data for connections that have been recycled — the SOCKS5 read
+            // task may still be draining queued events after the socket was freed.
+            if dead_conns.contains(&conn_id) {
+                return;
+            }
             *socks_data_recv += data.len() as u64;
-            if let Some(ci) = conns.iter().find(|c| c.conn_id == conn_id && c.state == ConnState::Established) {
+            if let Some(ci) = conns.iter_mut().find(|c| c.conn_id == conn_id && c.state == ConnState::Established) {
                 let socket = sockets.get_mut::<smol_tcp::Socket>(ci.handle);
                 if socket.can_send() {
                     match socket.send_slice(&data) {
                         Ok(n) => {
                             *socks_data_sent += n as u64;
                             if n < data.len() {
-                                *socks_data_dropped += (data.len() - n) as u64;
+                                // Buffer the unsent remainder for retry
+                                ci.pending_write.extend_from_slice(&data[n..]);
                             }
                         }
                         Err(e) => {
-                            *socks_data_dropped += data.len() as u64;
+                            // Buffer the entire chunk for retry
+                            ci.pending_write.extend_from_slice(&data);
                             logging::bridge_log(&format!(
                                 "send_slice ERR: conn_id={} err={:?} state={:?}",
                                 conn_id, e, socket.state()
                             ));
                         }
                     }
+                } else if ci.pending_write.len() < MAX_PENDING_WRITE {
+                    // Buffer entire chunk — will be retried in step 5
+                    ci.pending_write.extend_from_slice(&data);
                 } else {
                     *socks_data_dropped += data.len() as u64;
-                    logging::bridge_log(&format!(
-                        "can_send=false: conn_id={} state={:?} send_queue={}",
-                        conn_id, socket.state(), socket.send_queue()
-                    ));
                 }
             } else {
-                // Connection not found or not Established
+                // Connection not found or not Established — truly dropped
+                *socks_data_dropped += data.len() as u64;
                 let found = conns.iter().find(|c| c.conn_id == conn_id);
                 if let Some(ci) = found {
                     logging::bridge_log(&format!(
@@ -836,9 +952,10 @@ async fn tokio_handler(
                 // Insert channel BEFORE spawning so TcpData events don't race
                 let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(64);
                 TCP_CONN_MAP.lock().insert(conn_id, data_tx);
-                tokio::spawn(async move {
+                let handle = tokio::spawn(async move {
                     handle_tcp_conn(conn_id, dst, socks_addr, socks_tx2, data_rx).await;
                 });
+                TCP_TASK_MAP.lock().insert(conn_id, handle);
             }
             TunEvent::TcpData { conn_id, data } => {
                 let tx = TCP_CONN_MAP.lock().get(&conn_id).cloned();
@@ -848,6 +965,9 @@ async fn tokio_handler(
             }
             TunEvent::TcpClosed { conn_id } => {
                 TCP_CONN_MAP.lock().remove(&conn_id);
+                if let Some(handle) = TCP_TASK_MAP.lock().remove(&conn_id) {
+                    handle.abort();
+                }
             }
             TunEvent::UdpPacket {
                 src_ip,
@@ -878,6 +998,10 @@ use parking_lot::Mutex as ParkMutex;
 use std::sync::LazyLock;
 
 static TCP_CONN_MAP: LazyLock<ParkMutex<HashMap<u64, mpsc::Sender<Vec<u8>>>>> =
+    LazyLock::new(|| ParkMutex::new(HashMap::new()));
+
+/// Tracks spawned SOCKS5 task handles so they can be aborted when smoltcp recycles the connection.
+static TCP_TASK_MAP: LazyLock<ParkMutex<HashMap<u64, tokio::task::JoinHandle<()>>>> =
     LazyLock::new(|| ParkMutex::new(HashMap::new()));
 
 async fn handle_tcp_conn(
@@ -957,6 +1081,7 @@ async fn handle_tcp_conn(
     };
 
     TCP_CONN_MAP.lock().remove(&conn_id);
+    TCP_TASK_MAP.lock().remove(&conn_id);
 }
 
 // ---------------------------------------------------------------------------

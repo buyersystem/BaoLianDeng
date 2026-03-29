@@ -368,14 +368,16 @@ final class VPNManager: NSObject, ObservableObject {
             }
             let selectorGroups = proxies.compactMap { name, value -> String? in
                 guard let info = value as? [String: Any],
-                      (info["type"] as? String) == "Selector" else { return nil }
+                      (info["type"] as? String) == "Selector",
+                      let all = info["all"] as? [String],
+                      all.contains(nodeName) else { return nil }
                 return name
             }
             self?.dbg("selectNode: \(nodeName) in groups \(selectorGroups)")
             let body = try? JSONSerialization.data(withJSONObject: ["name": nodeName])
             for groupName in selectorGroups {
                 guard let encoded = groupName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-                      let putURL = URL(string: "http://\(AppConstants.externalControllerAddr)/proxies/\(encoded)") else { continue }
+                      let putURL = URL(string: "http://\(AppConstants.externalControllerAddr)/api/proxy-groups/\(encoded)/select") else { continue }
                 var request = URLRequest(url: putURL)
                 request.httpMethod = "PUT"
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -409,6 +411,15 @@ final class VPNManager: NSObject, ObservableObject {
                let selected = subs.first(where: { $0.id == selectedID }),
                let raw = selected.rawContent {
                 yaml = ConfigManager.mergeSubscription(raw, baseConfig: yaml, defaultConfig: yaml)
+            }
+        }
+
+        // Apply selected proxy node: save to disk, rewrite groups, read back
+        if let selectedNode = defaults.string(forKey: "selectedNode"), !selectedNode.isEmpty {
+            try? ConfigManager.shared.saveConfig(yaml)
+            ConfigManager.shared.applySelectedNode()
+            if let updated = try? ConfigManager.shared.loadConfig() {
+                yaml = updated
             }
         }
 

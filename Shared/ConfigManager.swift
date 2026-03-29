@@ -189,32 +189,26 @@ final class ConfigManager {
         var hasGeoAutoUpdate = false
 
         var inTunBlock = false
+        var inDnsBlock = false
         lines = lines.map { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             // Track top-level block transitions
             if !trimmed.isEmpty && !line.hasPrefix(" ") && !line.hasPrefix("\t") {
                 inTunBlock = trimmed.hasPrefix("tun:")
+                inDnsBlock = trimmed.hasPrefix("dns:")
             }
             // Disable TUN mode — proxy mode uses tun2socks, not Mihomo's built-in TUN
             if inTunBlock && trimmed.hasPrefix("enable:") {
+                return line.replacingOccurrences(of: "enable: true", with: "enable: false")
+            }
+            // Disable Mihomo's DNS server — tun2socks handles DNS via DoH
+            if inDnsBlock && trimmed.hasPrefix("enable:") {
                 return line.replacingOccurrences(of: "enable: true", with: "enable: false")
             }
             // Disable automatic geo database updates
             if trimmed.hasPrefix("geo-auto-update:") {
                 hasGeoAutoUpdate = true
                 return line.replacingOccurrences(of: "geo-auto-update: true", with: "geo-auto-update: false")
-            }
-            // Fix DNS listen address: 198.18.0.2 is in the TUN subnet but not a local
-            // interface address, so bind() fails. Use localhost instead.
-            if trimmed.hasPrefix("listen:") && trimmed.contains("198.18.0.2") {
-                return line.replacingOccurrences(of: "198.18.0.2:53", with: "127.0.0.1:1053")
-            }
-            // Replace blocked foreign DNS fallback servers with China-local ones
-            if trimmed == "- https://1.1.1.1/dns-query" {
-                return line.replacingOccurrences(of: "https://1.1.1.1/dns-query", with: "https://doh.pub/dns-query")
-            }
-            if trimmed == "- https://dns.google/dns-query" {
-                return line.replacingOccurrences(of: "https://dns.google/dns-query", with: "https://dns.alidns.com/dns-query")
             }
             return line
         }
@@ -234,16 +228,17 @@ final class ConfigManager {
     static func sanitizeConfigString(_ config: inout String) {
         config = config
             .replacingOccurrences(of: "geo-auto-update: true", with: "geo-auto-update: false")
-            .replacingOccurrences(of: "198.18.0.2:53", with: "127.0.0.1:1053")
-        // Disable TUN mode — block-aware so we only patch enable: inside the tun: block
+        // Disable TUN and DNS — block-aware so we only patch enable: inside the right block
         var lines = config.components(separatedBy: "\n")
         var inTunBlock = false
+        var inDnsBlock = false
         lines = lines.map { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty && !line.hasPrefix(" ") && !line.hasPrefix("\t") {
                 inTunBlock = trimmed.hasPrefix("tun:")
+                inDnsBlock = trimmed.hasPrefix("dns:")
             }
-            if inTunBlock && trimmed.hasPrefix("enable:") {
+            if (inTunBlock || inDnsBlock) && trimmed.hasPrefix("enable:") {
                 return line.replacingOccurrences(of: "enable: true", with: "enable: false")
             }
             return line
@@ -313,10 +308,11 @@ final class ConfigManager {
     }
 
     /// Pure merge logic — takes all inputs as parameters for testability.
-    /// Overwrites local config's proxy nodes, proxy groups, and rules with subscription data.
     /// Keeps the header (ports, DNS settings) from the base config.
+    /// Overwrites proxies, proxy-groups, rules, and providers directly from subscription
+    /// (raw pass-through to preserve all fields mihomo needs).
     static func mergeSubscription(_ yaml: String, baseConfig: String, defaultConfig: String) -> String {
-        // 1. Extract raw sections from subscription (preserves exact formatting for proxies/providers)
+        // 1. Extract raw sections from subscription (preserves exact formatting)
         let sub = extractYAMLSections(from: yaml, named: ["proxies", "proxy-groups", "proxy-providers", "rules", "rule-providers"])
 
         // 2. Header from base config (everything before proxies:) preserves user edits to ports, DNS, etc.
@@ -324,46 +320,15 @@ final class ConfigManager {
         let proxiesCut = baseLines.firstIndex(where: { !$0.hasPrefix(" ") && !$0.hasPrefix("\t") && $0.hasPrefix("proxies:") }) ?? baseLines.count
         let header = baseLines[0..<proxiesCut].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // 3. Extract proxy node names via Yams for reliable parsing
-        let parsed = (try? Yams.load(yaml: yaml)) as? [String: Any]
-        let proxiesArray = parsed?["proxies"] as? [[String: Any]] ?? []
-        let proxyNames = extractProxyNames(from: proxiesArray)
-
-        // 4. Build merged config
+        // 3. Build merged config — pass through raw sections from subscription
         var result = header
 
-        // Overwrite proxy nodes (raw pass-through preserves passwords, ciphers, etc.)
         result += "\n\n" + (sub["proxies"] ?? "proxies: []")
+        result += "\n\n" + (sub["proxy-groups"] ?? "proxy-groups: []")
 
-        // Overwrite proxy groups: PROXY selector (all nodes + DIRECT) + subscription groups
-        let subGroups = parsed?["proxy-groups"] as? [[String: Any]] ?? []
-        var pgSection = "proxy-groups:\n"
-        pgSection += "  - name: PROXY\n    type: select\n    proxies:\n"
-        for name in proxyNames {
-            pgSection += "      - \(name)\n"
-        }
-        pgSection += "      - DIRECT"
-        for group in subGroups {
-            guard let name = group["name"] as? String,
-                  let type = group["type"] as? String else { continue }
-            pgSection += "\n  - name: \(name)\n    type: \(type)"
-            if let url = group["url"] as? String { pgSection += "\n    url: \(url)" }
-            if let interval = group["interval"] as? Int { pgSection += "\n    interval: 0" }
-            let proxies = group["proxies"] as? [String] ?? []
-            if proxies.isEmpty {
-                pgSection += "\n    proxies: []"
-            } else {
-                pgSection += "\n    proxies:"
-                for p in proxies { pgSection += "\n      - \(p)" }
-            }
-        }
-        result += "\n\n" + pgSection
-
-        // Add subscription providers with auto-refresh disabled
         if let pp = sub["proxy-providers"] { result += "\n\n" + Self.disableProviderRefresh(pp) }
         if let rp = sub["rule-providers"] { result += "\n\n" + Self.disableProviderRefresh(rp) }
 
-        // Overwrite rules (fall back to default rules if subscription has none)
         let defaultRules = extractYAMLSections(from: defaultConfig, named: ["rules"])
         result += "\n\n" + (sub["rules"] ?? defaultRules["rules"] ?? "rules:\n  - MATCH,DIRECT")
 
@@ -430,7 +395,7 @@ final class ConfigManager {
         geo-auto-update: false
 
         dns:
-          enable: true
+          enable: false
           ipv6: true
           listen: 127.0.0.1:1053
           enhanced-mode: redir-host

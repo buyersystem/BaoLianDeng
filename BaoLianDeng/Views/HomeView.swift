@@ -15,6 +15,7 @@
 
 import SwiftUI
 import NetworkExtension
+import UniformTypeIdentifiers
 import os
 
 struct HomeView: View {
@@ -32,6 +33,7 @@ struct HomeView: View {
     @State private var toastMessage: String = ""
     @State private var showToast: Bool = false
     @State private var showExtensionHelp = false
+    @State private var showFileImporter = false
 
     var body: some View {
         NavigationStack {
@@ -54,9 +56,23 @@ struct HomeView: View {
                     scrollProxy?.scrollTo("subscriptionsTop", anchor: .top)
                 }
             }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [.yaml],
+                allowsMultipleSelection: false
+            ) { result in
+                importConfigFile(result)
+            }
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    Button(action: { showAddSubscription = true }) {
+                    Menu {
+                        Button("Add Subscription") {
+                            showAddSubscription = true
+                        }
+                        Button("Import Config File") {
+                            showFileImporter = true
+                        }
+                    } label: {
                         Image(systemName: "plus")
                     }
                 }
@@ -272,6 +288,26 @@ struct HomeView: View {
                         }
                         .tint(.orange)
                     }
+                    .contextMenu {
+                        Button {
+                            editingSubscription = sub
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        Button {
+                            refreshSubscription(&sub)
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                        Divider()
+                        Button(role: .destructive) {
+                            if let i = subscriptions.firstIndex(where: { $0.id == sub.id }) {
+                                deleteSubscription(at: IndexSet(integer: i))
+                            }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
 
                 if expandedSubscriptionIDs.contains(sub.id) {
                     ForEach(sub.nodes) { node in
@@ -373,6 +409,8 @@ struct HomeView: View {
                     try? ConfigManager.shared.applySubscriptionConfig(raw)
                 }
             }
+            // Auto-fetch subscriptions with missing or invalid rawContent
+            fetchNewSubscriptions()
         }
     }
 
@@ -403,7 +441,7 @@ struct HomeView: View {
     }
 
     private func fetchNewSubscriptions() {
-        for sub in subscriptions where sub.rawContent == nil && sub.nodes.isEmpty {
+        for sub in subscriptions where sub.nodes.isEmpty {
             let id = sub.id
             let url = sub.url
             let name = sub.name
@@ -430,6 +468,37 @@ struct HomeView: View {
                     displayToast(String(format: String(localized: "Failed to fetch %@"), name))
                 }
             }
+        }
+    }
+
+    private func importConfigFile(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            guard url.startAccessingSecurityScopedResource() else {
+                displayToast(String(localized: "Cannot access file"))
+                return
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
+            do {
+                let yaml = try String(contentsOf: url, encoding: .utf8)
+                if let validationError = ConfigManager.shared.validateSubscriptionConfig(yaml) {
+                    displayToast(String(format: String(localized: "Invalid: %@"), validationError))
+                    return
+                }
+                let nodes = SubscriptionParser.parse(yaml)
+                let name = url.deletingPathExtension().lastPathComponent
+                let sub = Subscription(name: name, url: "", nodes: nodes, rawContent: yaml)
+                subscriptions.append(sub)
+                saveSubscriptions()
+                selectSubscription(sub)
+                expandedSubscriptionIDs.insert(sub.id)
+                displayToast(String(format: String(localized: "Imported %@ (%lld nodes)"), name, nodes.count))
+            } catch {
+                displayToast(String(format: String(localized: "Failed to read file: %@"), error.localizedDescription))
+            }
+        case .failure(let error):
+            displayToast(String(format: String(localized: "File picker error: %@"), error.localizedDescription))
         }
     }
 

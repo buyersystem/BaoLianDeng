@@ -33,13 +33,6 @@ struct SubscriptionUsage: Codable, Identifiable {
     var total: Int64 { upload + download }
 }
 
-private struct TrackedConnection {
-    let id: String
-    var upload: Int64
-    var download: Int64
-    var isProxy: Bool
-}
-
 @MainActor
 final class TrafficStore: ObservableObject {
     static let shared = TrafficStore()
@@ -62,9 +55,6 @@ final class TrafficStore: ObservableObject {
     var currentMonthDownload: Int64 { currentMonthRecords.reduce(0) { $0 + $1.proxyDownload } }
     var currentMonthTotal: Int64 { currentMonthUpload + currentMonthDownload }
 
-    private var trackedConnections: [String: TrackedConnection] = [:]
-    private var closedProxyUpload: Int64 = 0
-    private var closedProxyDownload: Int64 = 0
     private var lastAttributedUpload: Int64 = 0
     private var lastAttributedDownload: Int64 = 0
     private var todayBaseUpload: Int64 = 0
@@ -122,9 +112,6 @@ final class TrafficStore: ObservableObject {
 
     func resetSession() {
         stopPolling()
-        trackedConnections.removeAll()
-        closedProxyUpload = 0
-        closedProxyDownload = 0
         sessionProxyUpload = 0
         sessionProxyDownload = 0
         activeProxyCount = 0
@@ -151,13 +138,18 @@ final class TrafficStore: ObservableObject {
                   let connections = json["connections"] as? [[String: Any]] else {
                 return
             }
+            // The tunnel tracks total upload/download across all connections.
+            // Per-connection stats are only finalized when connections close,
+            // so use the tunnel totals for accurate real-time tracking.
+            let uploadTotal = (json["upload_total"] as? NSNumber)?.int64Value ?? 0
+            let downloadTotal = (json["download_total"] as? NSNumber)?.int64Value ?? 0
             Task { @MainActor [weak self] in
-                self?.processConnections(connections)
+                self?.processConnections(connections, uploadTotal: uploadTotal, downloadTotal: downloadTotal)
             }
         }.resume()
     }
 
-    private func processConnections(_ connections: [[String: Any]]) {
+    private func processConnections(_ connections: [[String: Any]], uploadTotal: Int64, downloadTotal: Int64) {
         let today = Self.dateFormatter.string(from: Date())
         if today != currentDate {
             persistToday()
@@ -166,44 +158,17 @@ final class TrafficStore: ObservableObject {
             todayBaseDownload = 0
         }
 
-        var currentIds = Set<String>()
         var proxyCount = 0
-
         for conn in connections {
-            guard let id = conn["id"] as? String else { continue }
-
-            let upload = (conn["upload"] as? NSNumber)?.int64Value ?? 0
-            let download = (conn["download"] as? NSNumber)?.int64Value ?? 0
             let chains = conn["chains"] as? [String] ?? []
-            let isProxy = !isDirect(chains: chains)
-
-            currentIds.insert(id)
-            if isProxy { proxyCount += 1 }
-
-            trackedConnections[id] = TrackedConnection(
-                id: id, upload: upload, download: download, isProxy: isProxy
-            )
+            if !isDirect(chains: chains) { proxyCount += 1 }
         }
 
-        // Accumulate traffic from connections that disappeared (closed)
-        for (id, tracked) in trackedConnections where !currentIds.contains(id) {
-            if tracked.isProxy {
-                closedProxyUpload += tracked.upload
-                closedProxyDownload += tracked.download
-            }
-            trackedConnections.removeValue(forKey: id)
-        }
-
-        // Calculate session totals: closed + live proxy connections
-        var liveProxyUp: Int64 = 0
-        var liveProxyDown: Int64 = 0
-        for (_, tracked) in trackedConnections where tracked.isProxy {
-            liveProxyUp += tracked.upload
-            liveProxyDown += tracked.download
-        }
-
-        sessionProxyUpload = closedProxyUpload + liveProxyUp
-        sessionProxyDownload = closedProxyDownload + liveProxyDown
+        // Use tunnel-level totals for session traffic.
+        // The tunnel counts all traffic through the proxy engine; since tun2socks
+        // routes everything via SOCKS5, this is effectively all proxy traffic.
+        sessionProxyUpload = uploadTotal
+        sessionProxyDownload = downloadTotal
         activeProxyCount = proxyCount
         activeTotalCount = connections.count
 
