@@ -419,14 +419,47 @@ async fn packet_loop(
                         "SYN detected: {}:{}", dst, dst_port
                     ));
                 }
-                // Skip if we already have a Listening/Established socket for this exact SYN
-                // (SYN retransmit — let smoltcp handle it with the existing socket)
+                // Skip if we already have an actively connected socket for this exact SYN
+                // (SYN retransmit — let smoltcp handle it with the existing socket).
+                // Sockets in TCP closing states (CloseWait, FinWait, TimeWait, etc.)
+                // are NOT considered active — allow new connections to the same dst.
                 let already_handled = conns.iter().any(|c| {
                     c.dst_ip == dst_ip && c.dst_port == dst_port
-                        && (c.state == ConnState::Listening || c.state == ConnState::Established)
+                        && (c.state == ConnState::Listening
+                            || (c.state == ConnState::Established && {
+                                let s = sockets.get::<smol_tcp::Socket>(c.handle);
+                                matches!(
+                                    s.state(),
+                                    smol_tcp::State::Established
+                                        | smol_tcp::State::SynReceived
+                                        | smol_tcp::State::SynSent
+                                )
+                            }))
                 });
                 if already_handled {
                     continue;
+                }
+                // Recycle any old sockets for the same dst that are in closing states
+                for ci in conns.iter_mut().filter(|c| {
+                    c.dst_ip == dst_ip && c.dst_port == dst_port
+                        && c.state == ConnState::Established
+                }) {
+                    let s = sockets.get_mut::<smol_tcp::Socket>(ci.handle);
+                    if !matches!(
+                        s.state(),
+                        smol_tcp::State::Established
+                            | smol_tcp::State::SynReceived
+                            | smol_tcp::State::SynSent
+                    ) {
+                        let _ = tun_tx.send(TunEvent::TcpClosed {
+                            conn_id: ci.conn_id,
+                        });
+                        s.abort();
+                        ci.state = ConnState::Free;
+                        ci.conn_id = 0;
+                        ci.dst_ip = 0;
+                        ci.dst_port = 0;
+                    }
                 }
                 // Find a free socket and listen on dst_port
                 if let Some(ci) = conns.iter_mut().find(|c| c.state == ConnState::Free) {
@@ -518,14 +551,25 @@ async fn packet_loop(
                     }
                 }
                 ConnState::Established => {
-                    if !socket.is_open() {
-                        // Connection closed
+                    let tcp_state = socket.state();
+                    if !socket.is_open()
+                        || matches!(
+                            tcp_state,
+                            smol_tcp::State::TimeWait
+                                | smol_tcp::State::LastAck
+                                | smol_tcp::State::Closing
+                        )
+                    {
+                        // Connection in terminal TCP state — recycle immediately
+                        // so the socket is available for new connections to the same dst
                         let _ = tun_tx.send(TunEvent::TcpClosed {
                             conn_id: ci.conn_id,
                         });
                         socket.abort();
                         ci.state = ConnState::Free;
                         ci.conn_id = 0;
+                        ci.dst_ip = 0;
+                        ci.dst_port = 0;
                         continue;
                     }
                     active_conns += 1;
