@@ -1,6 +1,8 @@
 //! DNS-over-HTTPS client that sends DNS queries through the SOCKS5 proxy.
-//! Must go through the proxy because direct outbound connections from the
-//! packet tunnel extension go through the TUN, creating a routing loop.
+//! Although the extension process bypasses the TUN, direct DoH still fails because:
+//! 1. Hostname-based DoH servers need DNS to resolve → circular dependency
+//! 2. IP-based fallbacks (1.1.1.1, 8.8.8.8) may be blocked in restricted networks
+//! Routing through SOCKS5 → mihomo → upstream proxy solves both problems.
 //! Reads DoH server URLs from the Mihomo config; falls back to Cloudflare.
 
 use crate::logging;
@@ -27,7 +29,7 @@ static DOH_CLIENT: OnceLock<DohClient> = OnceLock::new();
 
 /// Initialize the DoH client. Call once at tun2socks startup.
 /// Reads DoH URLs from `{HOME_DIR}/config.yaml`, falls back to Cloudflare.
-/// Routes through SOCKS5 proxy to avoid TUN routing loops.
+/// Routes through SOCKS5 proxy so DoH works even in restricted networks.
 pub fn init_doh_client(socks_port: u16) {
     DOH_CLIENT.get_or_init(|| {
         let doh_urls = read_doh_urls_from_config();
