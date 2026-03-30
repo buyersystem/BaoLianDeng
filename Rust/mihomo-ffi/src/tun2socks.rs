@@ -63,8 +63,8 @@ pub fn start(fd: i32, socks_port: u16, _dns_port: u16) -> Result<(), String> {
 
     info!("tun2socks starting: fd={}, socks={}", fd, socks_addr);
 
-    // Initialize DoH client (reads config, connects directly to DoH servers)
-    doh_client::init_doh_client();
+    // Initialize DoH client (routes through SOCKS5 to avoid TUN routing loops)
+    doh_client::init_doh_client(socks_port);
 
     let rt = crate::get_runtime();
 

@@ -1,4 +1,6 @@
-//! DNS-over-HTTPS client that connects directly to DoH servers (bypassing the proxy).
+//! DNS-over-HTTPS client that sends DNS queries through the SOCKS5 proxy.
+//! Must go through the proxy because direct outbound connections from the
+//! packet tunnel extension go through the TUN, creating a routing loop.
 //! Reads DoH server URLs from the Mihomo config; falls back to Cloudflare.
 
 use crate::logging;
@@ -25,15 +27,18 @@ static DOH_CLIENT: OnceLock<DohClient> = OnceLock::new();
 
 /// Initialize the DoH client. Call once at tun2socks startup.
 /// Reads DoH URLs from `{HOME_DIR}/config.yaml`, falls back to Cloudflare.
-/// Connects directly to DoH servers (no proxy).
-pub fn init_doh_client() {
+/// Routes through SOCKS5 proxy to avoid TUN routing loops.
+pub fn init_doh_client(socks_port: u16) {
     DOH_CLIENT.get_or_init(|| {
         let doh_urls = read_doh_urls_from_config();
 
-        info!("DoH client: urls={:?}, direct (no proxy)", doh_urls);
+        info!("DoH client: urls={:?}, proxy=socks5h://127.0.0.1:{}", doh_urls, socks_port);
+
+        let proxy = reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", socks_port))
+            .expect("invalid proxy URL");
 
         let http_client = reqwest::Client::builder()
-            .no_proxy()
+            .proxy(proxy)
             .timeout(std::time::Duration::from_secs(DOH_TIMEOUT_SECS))
             .danger_accept_invalid_certs(true)
             .build()
