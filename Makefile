@@ -76,3 +76,6 @@ e2e-test:
 
 stress-test:
 	./tests/e2e/run-stress-test.sh
+
+stability-test:
+	./tests/e2e/run-stability-test.sh
