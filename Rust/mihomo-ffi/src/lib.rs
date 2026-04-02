@@ -2,7 +2,6 @@ mod diagnostics;
 mod dns_table;
 mod doh_client;
 mod logging;
-mod lwip_ffi;
 mod tun2socks;
 
 use mihomo_api::ApiServer;
@@ -348,9 +347,9 @@ pub extern "C" fn bridge_stop_proxy() {
 // tun2socks FFI
 // ---------------------------------------------------------------------------
 
-/// Start the lwIP-based tun2socks on the given TUN fd.
+/// Start the tun2socks on the given TUN fd.
 /// Connects reassembled TCP via SOCKS5 to 127.0.0.1:socks_port
-/// and forwards DNS UDP to 127.0.0.1:dns_port.
+/// and forwards DNS UDP via DoH.
 ///
 /// Call bridge_start_with_external_controller FIRST to start the engine,
 /// then call this to start tun2socks.

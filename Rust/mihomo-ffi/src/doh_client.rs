@@ -1,15 +1,20 @@
-//! DNS-over-HTTPS client that sends DNS queries through the SOCKS5 proxy.
-//! Although the extension process bypasses the TUN, direct DoH still fails because:
-//! 1. Hostname-based DoH servers need DNS to resolve → circular dependency
-//! 2. IP-based fallbacks (1.1.1.1, 8.8.8.8) may be blocked in restricted networks
-//! Routing through SOCKS5 → mihomo → upstream proxy solves both problems.
-//! Reads DoH server URLs from the Mihomo config; falls back to Cloudflare.
+//! DNS-over-HTTPS client that sends DNS queries through the SOCKS5 proxy,
+//! with plain UDP DNS as a fallback for cold-start bootstrap.
+//!
+//! Primary path: DoH through SOCKS5 → mihomo → upstream proxy → DoH server.
+//! This works once the proxy has an established TLS session.
+//!
+//! Fallback path: plain UDP DNS directly to Chinese public DNS servers.
+//! The extension process bypasses the TUN, so direct UDP works without proxy.
+//! This breaks the chicken-and-egg problem at cold start: the proxy needs DNS
+//! to connect, but DoH needs the proxy to resolve.
 
 use crate::logging;
 use std::sync::OnceLock;
 use tracing::{info, warn};
 
 const DOH_TIMEOUT_SECS: u64 = 5;
+const UDP_DNS_TIMEOUT_SECS: u64 = 3;
 
 /// IP-based DoH servers that don't require DNS resolution.
 /// These are always appended as fallbacks to avoid circular DNS dependency
@@ -18,6 +23,15 @@ const DOH_TIMEOUT_SECS: u64 = 5;
 const IP_BASED_DOH_URLS: &[&str] = &[
     "https://1.1.1.1/dns-query",
     "https://8.8.8.8/dns-query",
+];
+
+/// Plain UDP DNS servers for cold-start fallback.
+/// Used when all DoH servers fail (e.g. proxy TLS not yet established).
+/// The extension process bypasses the TUN, so direct UDP to these IPs works.
+const UDP_DNS_SERVERS: &[&str] = &[
+    "114.114.114.114:53",
+    "223.5.5.5:53",
+    "119.29.29.29:53",
 ];
 
 struct DohClient {
@@ -85,7 +99,64 @@ pub async fn resolve_via_doh(query: &[u8]) -> Option<Vec<u8>> {
         }
     }
 
-    logging::bridge_log("DoH: all servers failed");
+    // All DoH servers failed — fall back to plain UDP DNS.
+    // This handles the cold-start case where the proxy's TLS session
+    // isn't established yet, so DoH through SOCKS5 can't complete.
+    logging::bridge_log("DoH: all servers failed, trying plain UDP DNS fallback");
+    resolve_via_udp(query).await
+}
+
+// ---------------------------------------------------------------------------
+// Plain UDP DNS fallback
+// ---------------------------------------------------------------------------
+
+/// Send a raw DNS query via plain UDP to fallback servers.
+/// Used when DoH fails (cold start, proxy TLS not ready).
+/// The extension process bypasses TUN so direct UDP works.
+async fn resolve_via_udp(query: &[u8]) -> Option<Vec<u8>> {
+    use tokio::net::UdpSocket;
+    use std::time::Duration;
+
+    for server in UDP_DNS_SERVERS {
+        let addr: std::net::SocketAddr = match server.parse() {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
+
+        let socket = match UdpSocket::bind("0.0.0.0:0").await {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("UDP DNS: bind failed: {}", e);
+                continue;
+            }
+        };
+
+        if let Err(e) = socket.send_to(query, addr).await {
+            warn!("UDP DNS: send to {} failed: {}", server, e);
+            continue;
+        }
+
+        let mut buf = vec![0u8; 4096];
+        match tokio::time::timeout(
+            Duration::from_secs(UDP_DNS_TIMEOUT_SECS),
+            socket.recv_from(&mut buf),
+        )
+        .await
+        {
+            Ok(Ok((n, _))) => {
+                logging::bridge_log(&format!("UDP DNS: resolved via {} ({}B)", server, n));
+                return Some(buf[..n].to_vec());
+            }
+            Ok(Err(e)) => {
+                warn!("UDP DNS: recv from {} failed: {}", server, e);
+            }
+            Err(_) => {
+                warn!("UDP DNS: timeout from {}", server);
+            }
+        }
+    }
+
+    logging::bridge_log("DNS: all servers failed (DoH + UDP)");
     None
 }
 
