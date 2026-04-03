@@ -243,10 +243,24 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             subnetMasks: [AppConstants.tunSubnetMask]
         )
         ipv4.includedRoutes = [NEIPv4Route.default()]
-        // Exclude localhost and proxy server IPs so the proxy engine's
-        // outbound connections to upstream servers bypass the TUN.
+        // Exclude localhost, LAN, and private IP ranges so the proxy engine's
+        // outbound connections and local network traffic bypass the TUN.
         var excluded = [
-            NEIPv4Route(destinationAddress: "127.0.0.0", subnetMask: "255.0.0.0"),
+            NEIPv4Route(destinationAddress: "0.0.0.0", subnetMask: "255.0.0.0"),         // 0.0.0.0/8 - Current network
+            NEIPv4Route(destinationAddress: "10.0.0.0", subnetMask: "255.0.0.0"),         // 10.0.0.0/8 - Private
+            NEIPv4Route(destinationAddress: "100.64.0.0", subnetMask: "255.192.0.0"),     // 100.64.0.0/10 - CGNAT
+            NEIPv4Route(destinationAddress: "127.0.0.0", subnetMask: "255.0.0.0"),        // 127.0.0.0/8 - Loopback
+            NEIPv4Route(destinationAddress: "169.254.0.0", subnetMask: "255.255.0.0"),    // 169.254.0.0/16 - Link-local
+            NEIPv4Route(destinationAddress: "172.16.0.0", subnetMask: "255.240.0.0"),     // 172.16.0.0/12 - Private
+            NEIPv4Route(destinationAddress: "192.0.0.0", subnetMask: "255.255.255.0"),    // 192.0.0.0/24 - IETF protocol
+            NEIPv4Route(destinationAddress: "192.0.2.0", subnetMask: "255.255.255.0"),    // 192.0.2.0/24 - Documentation
+            NEIPv4Route(destinationAddress: "192.88.99.0", subnetMask: "255.255.255.0"),  // 192.88.99.0/24 - 6to4 relay
+            NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),    // 192.168.0.0/16 - Private
+            NEIPv4Route(destinationAddress: "198.51.100.0", subnetMask: "255.255.255.0"), // 198.51.100.0/24 - Documentation
+            NEIPv4Route(destinationAddress: "203.0.113.0", subnetMask: "255.255.255.0"),  // 203.0.113.0/24 - Documentation
+            NEIPv4Route(destinationAddress: "224.0.0.0", subnetMask: "240.0.0.0"),        // 224.0.0.0/4 - Multicast
+            NEIPv4Route(destinationAddress: "240.0.0.0", subnetMask: "240.0.0.0"),        // 240.0.0.0/4 - Reserved
+            NEIPv4Route(destinationAddress: "255.255.255.255", subnetMask: "255.255.255.255"), // Broadcast
         ]
         for ip in proxyServerIPs {
             excluded.append(NEIPv4Route(destinationAddress: ip, subnetMask: "255.255.255.255"))
@@ -261,7 +275,10 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         )
         ipv6.includedRoutes = [NEIPv6Route.default()]
         ipv6.excludedRoutes = [
-            NEIPv6Route(destinationAddress: "::1", networkPrefixLength: 128),
+            NEIPv6Route(destinationAddress: "::1", networkPrefixLength: 128),             // Loopback
+            NEIPv6Route(destinationAddress: "fc00::", networkPrefixLength: 7),             // Unique local (ULA)
+            NEIPv6Route(destinationAddress: "fe80::", networkPrefixLength: 10),            // Link-local
+            NEIPv6Route(destinationAddress: "ff00::", networkPrefixLength: 8),             // Multicast
         ]
         settings.ipv6Settings = ipv6
 
