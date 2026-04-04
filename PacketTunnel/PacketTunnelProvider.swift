@@ -53,6 +53,7 @@ class PacketTunnelProvider: NETransparentProxyProvider {
     private var proxyStarted = false
     private var gcTimer: DispatchSourceTimer?
     private var diagnosticTimer: DispatchSourceTimer?
+    private var logTrimTimer: DispatchSourceTimer?
     private let dnsTable = DNSTable()
 
     private static let socksHost = "127.0.0.1"
@@ -146,6 +147,7 @@ class PacketTunnelProvider: NETransparentProxyProvider {
             self?.setupLogging()
             self?.startMemoryManagement()
             self?.startDiagnosticLogging()
+            self?.startLogTrimming()
             completionHandler(nil)
 
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
@@ -166,6 +168,8 @@ class PacketTunnelProvider: NETransparentProxyProvider {
     ) {
         diagnosticTimer?.cancel()
         diagnosticTimer = nil
+        logTrimTimer?.cancel()
+        logTrimTimer = nil
         stopMemoryManagement()
         if proxyStarted {
             BridgeStopProxy()
@@ -867,23 +871,54 @@ class PacketTunnelProvider: NETransparentProxyProvider {
             queue: .global(qos: .utility)
         )
         timer.schedule(deadline: .now() + 3, repeating: 3)
-        var count = 0
         timer.setEventHandler { [weak self] in
             let upload = BridgeGetUploadTraffic()
             let download = BridgeGetDownloadTraffic()
             let running = BridgeIsRunning()
             self?.log(
-                "DIAG[\(count)]: running=\(running) upload=\(upload) download=\(download)"
+                "DIAG: running=\(running) upload=\(upload) download=\(download)"
             )
-            count += 1
-            if count >= 40 {
-                self?.diagnosticTimer?.cancel()
-                self?.diagnosticTimer = nil
-                self?.log("DIAG: diagnostic logging stopped after 120s")
-            }
         }
         timer.resume()
         diagnosticTimer = timer
+    }
+
+    /// Trim the log file every 10 minutes, keeping only lines from the last hour.
+    private func startLogTrimming() {
+        let timer = DispatchSource.makeTimerSource(
+            queue: .global(qos: .utility)
+        )
+        timer.schedule(deadline: .now() + 600, repeating: 600)
+        timer.setEventHandler { [weak self] in
+            self?.trimLogFile()
+        }
+        timer.resume()
+        logTrimTimer = timer
+    }
+
+    private func trimLogFile() {
+        guard let content = try? String(
+            contentsOf: logURL, encoding: .utf8
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-3600)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss Z"
+        let lines = content.components(separatedBy: "\n")
+        let kept = lines.filter { line in
+            // Lines look like: [2026-04-04 12:34:56 +0000] message
+            guard line.hasPrefix("["),
+                  let end = line.firstIndex(of: "]")
+            else { return false }
+            let dateStr = String(
+                line[line.index(after: line.startIndex)..<end]
+            )
+            guard let date = formatter.date(from: dateStr) else {
+                return true
+            }
+            return date >= cutoff
+        }
+        let trimmed = kept.joined(separator: "\n") + "\n"
+        try? trimmed.write(to: logURL, atomically: true, encoding: .utf8)
     }
 
     private func preResolveProxyServers(configPath: String) -> Set<String> {
