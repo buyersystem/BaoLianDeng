@@ -13,16 +13,51 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import NetworkExtension
+@preconcurrency import NetworkExtension
 import MihomoCore
 import Network
 import os
 import Yams
 
-class PacketTunnelProvider: NEPacketTunnelProvider {
+// MARK: - DNS Table (IP → Domain mapping)
+
+/// Shared IP→domain lookup table (reference: trans_proxy dns.rs DnsTable).
+/// When DNS queries are intercepted, A record responses populate this table.
+/// Later, TCP flows use it to send domain-based SOCKS5 CONNECT requests.
+final class DNSTable {
+    private var table: [String: String] = [:]  // IP → domain
+    private let lock = NSLock()
+    private let maxEntries = 10_000
+
+    func lookup(_ ipAddress: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return table[ipAddress]
+    }
+
+    func insert(ipAddress: String, domain: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        if table.count >= maxEntries {
+            // Simple eviction: clear half
+            let keys = Array(table.keys.prefix(maxEntries / 2))
+            for key in keys { table.removeValue(forKey: key) }
+        }
+        table[ipAddress] = domain
+    }
+}
+
+// MARK: - Transparent Proxy Provider
+
+class PacketTunnelProvider: NETransparentProxyProvider {
     private var proxyStarted = false
     private var gcTimer: DispatchSourceTimer?
     private var diagnosticTimer: DispatchSourceTimer?
+    private let dnsTable = DNSTable()
+
+    private static let socksHost = "127.0.0.1"
+    private static let socksPort: UInt16 = 7890
+    private static let dohURL = "https://cloudflare-dns.com/dns-query"
 
     private lazy var logURL: URL = {
         let dir = ConfigManager.shared.configDirectoryURL?.deletingLastPathComponent()
@@ -46,40 +81,39 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
-        // Clear old log on each tunnel start
+    // MARK: - Proxy Lifecycle
+
+    override func startProxy(
+        options: [String: Any]? = nil,
+        completionHandler: @escaping (Error?) -> Void
+    ) {
         try? FileManager.default.removeItem(at: logURL)
-        log("startTunnel called")
+        log("startProxy called (NETransparentProxyProvider)")
 
         let configDir = setupConfigFromProvider()
         log("configDir: \(configDir)")
 
         let configPath = configDir + "/config.yaml"
         guard FileManager.default.fileExists(atPath: configPath) else {
-            log("ERROR: config.yaml still not found at \(configPath)")
-            completionHandler(PacketTunnelError.configNotFound)
+            log("ERROR: config.yaml not found at \(configPath)")
+            completionHandler(ProviderError.configNotFound)
             return
         }
 
-        // Sanitize subscription configs (fix stack, DNS, geo-auto-update)
         ConfigManager.shared.sanitizeConfig()
         log("Config sanitized")
 
-        // Pre-resolve proxy server hostnames to IPs while DNS still works
-        // (before TUN routes take effect). This serves two purposes:
-        // 1. The resolved IPs are excluded from TUN routes to avoid loops
-        // 2. Hostnames in config are replaced with IPs so the proxy adapter
-        //    connects directly without needing DNS at runtime
+        // Pre-resolve proxy server hostnames while DNS still works
         let resolvedIPs = preResolveProxyServers(configPath: configPath)
         log("Pre-resolved \(resolvedIPs.count) proxy server IP(s)")
 
-        // Log config summary for debugging
         if let cfg = try? String(contentsOfFile: configPath, encoding: .utf8) {
             log("config.yaml preview: \(String(cfg.prefix(300)))")
         }
 
-        let settings = createTunnelSettings(proxyServerIPs: resolvedIPs)
-        log("Setting tunnel network settings")
+        // Build transparent proxy network settings
+        let settings = createProxySettings()
+        log("Setting transparent proxy network settings")
 
         setTunnelNetworkSettings(settings) { [weak self] error in
             if let error = error {
@@ -89,18 +123,18 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             self?.log("setTunnelNetworkSettings succeeded")
 
-            // Enable Rust-side logging to the same directory as tunnel.log
-            let rustLogPath = (configDir as NSString).deletingLastPathComponent + "/rust_bridge.log"
-            self?.log("Setting Rust log file: \(rustLogPath)")
+            let rustLogPath = (configDir as NSString).deletingLastPathComponent
+                + "/rust_bridge.log"
             BridgeSetLogFile(rustLogPath)
 
-            // Step 1: Point mihomo at the config directory and start the engine
             self?.log("Setting home dir: \(configDir)")
             BridgeSetHomeDir(configDir)
 
-            self?.log("Starting Mihomo proxy engine with external controller")
+            self?.log("Starting Mihomo proxy engine")
             var startError: NSError?
-            BridgeStartWithExternalController(AppConstants.externalControllerAddr, "", &startError)
+            BridgeStartWithExternalController(
+                AppConstants.externalControllerAddr, "", &startError
+            )
             if let startError = startError {
                 self?.log("ERROR: BridgeStartWithExternalController failed: \(startError)")
                 completionHandler(startError)
@@ -108,53 +142,28 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             self?.log("Proxy engine started")
 
-            // Step 2: Find the TUN fd
-            guard let fd = self?.tunnelFileDescriptor else {
-                self?.log("ERROR: could not find utun file descriptor")
-                completionHandler(PacketTunnelError.tunnelFDNotFound)
-                return
-            }
-            self?.log("Found TUN fd: \(fd)")
-
-            // Step 3: Start tun2socks (lwIP reads fd, forwards via SOCKS5 to engine)
-            self?.log("Starting tun2socks: fd=\(fd), socks=7890, dns=1053")
-            var tun2socksError: NSError?
-            BridgeStartTun2Socks(Int32(fd), 7890, 1053, &tun2socksError)
-            if let tun2socksError = tun2socksError {
-                self?.log("ERROR: BridgeStartTun2Socks failed: \(tun2socksError)")
-                completionHandler(tun2socksError)
-                return
-            }
-            self?.log("tun2socks started successfully")
-
             self?.proxyStarted = true
             self?.setupLogging()
             self?.startMemoryManagement()
             self?.startDiagnosticLogging()
             completionHandler(nil)
 
-            // Run connectivity diagnostics in background
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
-                self?.log("TCP-TEST: direct TCP to www.baidu.com:80...")
-                let directResult = BridgeTestDirectTCP("www.baidu.com", 80)
-                self?.log("TCP-TEST direct: \(directResult ?? "nil")")
-
-                self?.log("TCP-TEST: HTTP via proxy to http://www.baidu.com/...")
+                self?.log("TCP-TEST: HTTP via proxy...")
                 let proxyResult = BridgeTestProxyHTTP("http://www.baidu.com/")
                 self?.log("TCP-TEST proxy: \(proxyResult ?? "nil")")
 
                 self?.log("DNS-TEST: resolving via Mihomo DNS...")
                 let dnsResult = BridgeTestDNSResolver("127.0.0.1:1053")
                 self?.log("DNS-TEST: \(dnsResult ?? "nil")")
-
-                self?.log("PROXY-TEST: testing selected proxy node...")
-                let proxyTestResult = BridgeTestSelectedProxy(AppConstants.externalControllerAddr)
-                self?.log("PROXY-TEST: \(proxyTestResult ?? "nil")")
             }
         }
     }
 
-    override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+    override func stopProxy(
+        with reason: NEProviderStopReason,
+        completionHandler: @escaping () -> Void
+    ) {
         diagnosticTimer?.cancel()
         diagnosticTimer = nil
         stopMemoryManagement()
@@ -165,31 +174,565 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler()
     }
 
-    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
-        guard let message = try? JSONSerialization.jsonObject(with: messageData) as? [String: Any],
-              let action = message["action"] as? String else {
+    // MARK: - Flow Handling
+
+    override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
+        if let tcpFlow = flow as? NEAppProxyTCPFlow {
+            handleTCPFlow(tcpFlow)
+            return true
+        }
+        if let udpFlow = flow as? NEAppProxyUDPFlow {
+            handleUDPFlow(udpFlow)
+            return true
+        }
+        return false
+    }
+
+    // MARK: - TCP Flow (SOCKS5 relay)
+
+    private func handleTCPFlow(_ flow: NEAppProxyTCPFlow) {
+        guard let endpoint = flow.remoteEndpoint as? NWHostEndpoint else {
+            flow.closeReadWithError(nil)
+            flow.closeWriteWithError(nil)
+            return
+        }
+
+        let destHost = endpoint.hostname
+        let destPort = endpoint.port
+
+        // Look up domain from DNS table (like trans_proxy's dns_table.lookup())
+        let hostname = dnsTable.lookup(destHost) ?? destHost
+
+        Task {
+            do {
+                // Connect to Mihomo's SOCKS5 proxy
+                let socksConn = try await connectTCP(
+                    host: Self.socksHost, port: Self.socksPort
+                )
+
+                // SOCKS5 handshake
+                try await socks5Handshake(
+                    connection: socksConn,
+                    destHost: hostname,
+                    destPort: UInt16(destPort) ?? 0
+                )
+
+                // Open the flow
+                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                    flow.open(withLocalEndpoint: nil) { error in
+                        if let error = error {
+                            cont.resume(throwing: error)
+                        } else {
+                            cont.resume()
+                        }
+                    }
+                }
+
+                // Relay bidirectionally: flow ↔ SOCKS5 connection
+                await relayTCP(flow: flow, connection: socksConn)
+
+            } catch {
+                flow.closeReadWithError(error)
+                flow.closeWriteWithError(error)
+            }
+        }
+    }
+
+    // MARK: - UDP Flow (DNS interception)
+
+    private func handleUDPFlow(_ flow: NEAppProxyUDPFlow) {
+        Task {
+            do {
+                // Open the UDP flow
+                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                    flow.open(withLocalEndpoint: nil) { error in
+                        if let error = error {
+                            cont.resume(throwing: error)
+                        } else {
+                            cont.resume()
+                        }
+                    }
+                }
+
+                // Read datagrams and handle DNS
+                await handleUDPDatagrams(flow: flow)
+
+            } catch {
+                flow.closeReadWithError(error)
+                flow.closeWriteWithError(error)
+            }
+        }
+    }
+
+    private func handleUDPDatagrams(flow: NEAppProxyUDPFlow) async {
+        while true {
+            var datagrams: [Data] = []
+            var endpoints: [NWHostEndpoint] = []
+            var readError: Error?
+
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                flow.readDatagrams { dgs, eps, err in
+                    datagrams = dgs ?? []
+                    endpoints = (eps ?? []).compactMap {
+                        $0 as? NWHostEndpoint
+                    }
+                    readError = err
+                    cont.resume()
+                }
+            }
+
+            if let readError = readError {
+                log("UDP read error: \(readError)")
+                break
+            }
+
+            if datagrams.isEmpty {
+                break  // Flow closed
+            }
+
+            for (index, datagram) in datagrams.enumerated() {
+                guard let endpoint = endpoints[safe: index] else {
+                    continue
+                }
+
+                let port = UInt16(endpoint.port) ?? 0
+
+                if port == 53 {
+                    await handleDNSQuery(
+                        query: datagram, flow: flow, endpoint: endpoint
+                    )
+                }
+            }
+        }
+    }
+
+    /// Handle a DNS query: forward via DoH through SOCKS5, parse response,
+    /// populate DNS table, return response to the flow.
+    /// Reference: trans_proxy/src/dns.rs run_doh()
+    private func handleDNSQuery(
+        query: Data, flow: NEAppProxyUDPFlow, endpoint: NWHostEndpoint
+    ) async {
+        guard query.count >= 12 else { return }
+
+        // Extract queried domain name for DNS table
+        let queriedDomain = extractDomainFromQuery(query)
+
+        do {
+            // Forward DNS via DoH through SOCKS5 proxy
+            let response = try await resolveDNSviaDoH(query: query)
+
+            // Parse A records and populate DNS table
+            if let domain = queriedDomain {
+                let ips = extractARecords(from: response)
+                for ipAddr in ips {
+                    dnsTable.insert(ipAddress: ipAddr, domain: domain)
+                }
+            }
+
+            // Send response back to the flow
+            flow.writeDatagrams([response], sentBy: [endpoint]) { error in
+                if let error = error {
+                    AppLogger.tunnel.error(
+                        "DNS write error: \(error, privacy: .public)"
+                    )
+                }
+            }
+
+        } catch {
+            log("DoH error: \(error)")
+        }
+    }
+
+    // MARK: - DoH Client (reference: trans_proxy dns.rs)
+
+    /// Resolve a DNS query via DNS-over-HTTPS through the SOCKS5 proxy.
+    private func resolveDNSviaDoH(query: Data) async throws -> Data {
+        // Connect to DoH server through SOCKS5
+        let socksConn = try await connectTCP(
+            host: Self.socksHost, port: Self.socksPort
+        )
+
+        // SOCKS5 handshake to DoH server
+        try await socks5Handshake(
+            connection: socksConn,
+            destHost: "cloudflare-dns.com",
+            destPort: 443
+        )
+
+        // Build HTTP request with DNS wire format (RFC 8484)
+        let httpRequest = buildDoHRequest(query: query)
+
+        // Send request
+        try await sendAll(connection: socksConn, data: httpRequest)
+
+        // Read response
+        let responseData = try await readHTTPResponse(connection: socksConn)
+
+        socksConn.cancel()
+        return responseData
+    }
+
+    private func buildDoHRequest(query: Data) -> Data {
+        var request = Data()
+        let path = "/dns-query"
+        let host = "cloudflare-dns.com"
+        let header = [
+            "POST \(path) HTTP/1.1\r\n",
+            "Host: \(host)\r\n",
+            "Content-Type: application/dns-message\r\n",
+            "Accept: application/dns-message\r\n",
+            "Content-Length: \(query.count)\r\n",
+            "Connection: close\r\n",
+            "\r\n"
+        ].joined()
+        request.append(header.data(using: .utf8)!)
+        request.append(query)
+        return request
+    }
+
+    // MARK: - SOCKS5 Handshake
+
+    /// Perform SOCKS5 handshake (RFC 1928) with domain-based CONNECT.
+    private func socks5Handshake(
+        connection: NWConnection,
+        destHost: String,
+        destPort: UInt16
+    ) async throws {
+        // Step 1: Greeting — no auth
+        let greeting = Data([0x05, 0x01, 0x00])
+        try await sendAll(connection: connection, data: greeting)
+
+        let authResp = try await readExact(connection: connection, count: 2)
+        guard authResp[0] == 0x05, authResp[1] == 0x00 else {
+            throw ProviderError.socks5AuthFailed
+        }
+
+        // Step 2: CONNECT request
+        var request = Data([0x05, 0x01, 0x00])
+
+        // Determine address type
+        if IPv4Address(destHost) != nil {
+            // IPv4
+            request.append(0x01)
+            let parts = destHost.split(separator: ".").compactMap {
+                UInt8($0)
+            }
+            request.append(contentsOf: parts)
+        } else if let ipv6 = IPv6Address(destHost) {
+            // IPv6
+            request.append(0x04)
+            withUnsafeBytes(of: ipv6.rawValue) { request.append(contentsOf: $0) }
+        } else {
+            // Domain name (ATYP 0x03)
+            request.append(0x03)
+            let domainBytes = Array(destHost.utf8)
+            request.append(UInt8(domainBytes.count))
+            request.append(contentsOf: domainBytes)
+        }
+
+        // Port (big-endian)
+        request.append(UInt8(destPort >> 8))
+        request.append(UInt8(destPort & 0xFF))
+
+        try await sendAll(connection: connection, data: request)
+
+        // Read response: version, status, rsv, atyp
+        let connResp = try await readExact(connection: connection, count: 4)
+        guard connResp[0] == 0x05, connResp[1] == 0x00 else {
+            throw ProviderError.socks5ConnectFailed
+        }
+
+        // Skip bound address
+        switch connResp[3] {
+        case 0x01:  // IPv4
+            _ = try await readExact(connection: connection, count: 4 + 2)
+        case 0x03:  // Domain
+            let lenData = try await readExact(connection: connection, count: 1)
+            _ = try await readExact(
+                connection: connection, count: Int(lenData[0]) + 2
+            )
+        case 0x04:  // IPv6
+            _ = try await readExact(connection: connection, count: 16 + 2)
+        default:
+            break
+        }
+    }
+
+    // MARK: - TCP Relay
+
+    private func relayTCP(flow: NEAppProxyTCPFlow, connection: NWConnection) async {
+        await withTaskGroup(of: Void.self) { group in
+            // Flow → SOCKS5
+            group.addTask {
+                while true {
+                    let data: Data? = await withCheckedContinuation { cont in
+                        flow.readData(completionHandler: { data, error in
+                            if error != nil || data == nil || data!.isEmpty {
+                                cont.resume(returning: nil)
+                            } else {
+                                cont.resume(returning: data)
+                            }
+                        })
+                    }
+                    guard let data = data else { break }
+                    do {
+                        try await self.sendAll(connection: connection, data: data)
+                    } catch {
+                        break
+                    }
+                }
+                connection.cancel()
+            }
+
+            // SOCKS5 → Flow
+            group.addTask {
+                while true {
+                    do {
+                        let data = try await self.readSome(connection: connection)
+                        guard !data.isEmpty else { break }
+                        let writeOK: Bool = await withCheckedContinuation { cont in
+                            flow.write(data) { error in
+                                cont.resume(returning: error == nil)
+                            }
+                        }
+                        if !writeOK { break }
+                    } catch {
+                        break
+                    }
+                }
+                flow.closeReadWithError(nil)
+                flow.closeWriteWithError(nil)
+            }
+        }
+    }
+
+    // MARK: - NWConnection Helpers
+
+    private func connectTCP(host: String, port: UInt16) async throws -> NWConnection {
+        let endpoint = NWEndpoint.hostPort(
+            host: NWEndpoint.Host(host),
+            port: NWEndpoint.Port(rawValue: port)!
+        )
+        let connection = NWConnection(to: endpoint, using: .tcp)
+
+        return try await withCheckedThrowingContinuation { cont in
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    connection.stateUpdateHandler = nil
+                    cont.resume(returning: connection)
+                case .failed(let error):
+                    connection.stateUpdateHandler = nil
+                    cont.resume(throwing: error)
+                case .cancelled:
+                    connection.stateUpdateHandler = nil
+                    cont.resume(throwing: ProviderError.connectionCancelled)
+                default:
+                    break
+                }
+            }
+            connection.start(queue: .global(qos: .userInitiated))
+        }
+    }
+
+    private func sendAll(connection: NWConnection, data: Data) async throws {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            connection.send(
+                content: data,
+                completion: .contentProcessed { error in
+                    if let error = error {
+                        cont.resume(throwing: error)
+                    } else {
+                        cont.resume()
+                    }
+                })
+        }
+    }
+
+    private func readExact(connection: NWConnection, count: Int) async throws -> Data {
+        try await withCheckedThrowingContinuation { cont in
+            connection.receive(
+                minimumIncompleteLength: count,
+                maximumLength: count
+            ) { data, _, _, error in
+                if let error = error {
+                    cont.resume(throwing: error)
+                } else if let data = data, data.count >= count {
+                    cont.resume(returning: data)
+                } else {
+                    cont.resume(throwing: ProviderError.unexpectedEOF)
+                }
+            }
+        }
+    }
+
+    private func readSome(connection: NWConnection) async throws -> Data {
+        try await withCheckedThrowingContinuation { cont in
+            connection.receive(
+                minimumIncompleteLength: 1,
+                maximumLength: 65536
+            ) { data, _, isComplete, error in
+                if let error = error {
+                    cont.resume(throwing: error)
+                } else if let data = data, !data.isEmpty {
+                    cont.resume(returning: data)
+                } else if isComplete {
+                    cont.resume(returning: Data())
+                } else {
+                    cont.resume(returning: Data())
+                }
+            }
+        }
+    }
+
+    private func readHTTPResponse(connection: NWConnection) async throws -> Data {
+        var buffer = Data()
+        // Read until we find \r\n\r\n (end of headers)
+        while true {
+            let chunk = try await readSome(connection: connection)
+            if chunk.isEmpty { break }
+            buffer.append(chunk)
+            if let headerEnd = buffer.range(
+                of: Data("\r\n\r\n".utf8)
+            ) {
+                // Find Content-Length
+                let headerStr = String(
+                    data: buffer[..<headerEnd.lowerBound], encoding: .utf8
+                ) ?? ""
+                let bodyStart = headerEnd.upperBound
+                var contentLength = 0
+                for line in headerStr.split(separator: "\r\n")
+                    where line.lowercased().hasPrefix("content-length:") {
+                    let val = line.dropFirst("content-length:".count)
+                        .trimmingCharacters(in: .whitespaces)
+                    contentLength = Int(val) ?? 0
+                }
+
+                // Read remaining body if needed
+                let bodyReceived = buffer.count - bodyStart
+                while buffer.count - bodyStart < contentLength {
+                    let more = try await readSome(connection: connection)
+                    if more.isEmpty { break }
+                    buffer.append(more)
+                }
+
+                return Data(buffer[bodyStart...])
+            }
+        }
+        throw ProviderError.unexpectedEOF
+    }
+
+    // MARK: - DNS Parsing (reference: trans_proxy dns.rs)
+
+    /// Extract the queried domain name from a DNS query packet.
+    private func extractDomainFromQuery(_ packet: Data) -> String? {
+        guard packet.count >= 12 else { return nil }
+        var pos = 12
+        var labels: [String] = []
+        while pos < packet.count {
+            let len = Int(packet[pos])
+            if len == 0 { break }
+            if len >= 0xC0 { break }  // Compression pointer
+            pos += 1
+            guard pos + len <= packet.count else { return nil }
+            if let label = String(
+                data: packet[pos..<pos + len], encoding: .utf8
+            ) {
+                labels.append(label)
+            }
+            pos += len
+        }
+        return labels.isEmpty ? nil : labels.joined(separator: ".")
+    }
+
+    /// Extract A record IPs from a DNS response packet.
+    private func extractARecords(from packet: Data) -> [String] {
+        guard packet.count >= 12 else { return [] }
+        let ancount = (UInt16(packet[6]) << 8) | UInt16(packet[7])
+        let qdcount = (UInt16(packet[4]) << 8) | UInt16(packet[5])
+        var pos = 12
+
+        // Skip question section
+        for _ in 0..<qdcount {
+            pos = skipDNSName(packet, pos: pos) ?? packet.count
+            pos += 4  // QTYPE + QCLASS
+        }
+
+        // Parse answer records
+        var ips: [String] = []
+        for _ in 0..<ancount {
+            guard let nextPos = skipDNSName(packet, pos: pos) else { break }
+            pos = nextPos
+            guard pos + 10 <= packet.count else { break }
+            let rtype = (UInt16(packet[pos]) << 8) | UInt16(packet[pos + 1])
+            let rdlength = (UInt16(packet[pos + 8]) << 8)
+                | UInt16(packet[pos + 9])
+            pos += 10
+            if rtype == 1 && rdlength == 4 && pos + 4 <= packet.count {
+                // A record
+                let addr =
+                    "\(packet[pos]).\(packet[pos+1]).\(packet[pos+2]).\(packet[pos+3])"
+                ips.append(addr)
+            }
+            pos += Int(rdlength)
+        }
+        return ips
+    }
+
+    /// Skip a DNS name (handles compression pointers).
+    private func skipDNSName(_ packet: Data, pos: Int) -> Int? {
+        var current = pos
+        while current < packet.count {
+            let len = Int(packet[current])
+            if len == 0 {
+                return current + 1
+            }
+            if len >= 0xC0 {
+                // Compression pointer — 2 bytes
+                return current + 2
+            }
+            current += 1 + len
+        }
+        return nil
+    }
+
+    // MARK: - IPC
+
+    override func handleAppMessage(
+        _ messageData: Data,
+        completionHandler: ((Data?) -> Void)?
+    ) {
+        guard let message = try? JSONSerialization.jsonObject(
+            with: messageData
+        ) as? [String: Any],
+            let action = message["action"] as? String
+        else {
             completionHandler?(nil)
             return
         }
 
         switch action {
         case "get_traffic":
-            let up = BridgeGetUploadTraffic()
-            let down = BridgeGetDownloadTraffic()
-            completionHandler?(responseData([
-                "upload": up,
-                "download": down
-            ]))
+            let upload = BridgeGetUploadTraffic()
+            let download = BridgeGetDownloadTraffic()
+            completionHandler?(
+                responseData(["upload": upload, "download": download])
+            )
 
         case "get_version":
             let version = BridgeVersion()
-            completionHandler?(responseData(["version": version ?? "unknown"]))
+            completionHandler?(
+                responseData(["version": version ?? "unknown"])
+            )
 
         case "get_log":
-            var logContent = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
-            // Append Rust bridge log
-            let rustLogURL = logURL.deletingLastPathComponent().appendingPathComponent("rust_bridge.log")
-            if let rustLog = try? String(contentsOf: rustLogURL, encoding: .utf8) {
+            var logContent =
+                (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+            let rustLogURL = logURL.deletingLastPathComponent()
+                .appendingPathComponent("rust_bridge.log")
+            if let rustLog = try? String(
+                contentsOf: rustLogURL, encoding: .utf8
+            ) {
                 logContent += "\n--- Rust Bridge Log ---\n" + rustLog
             }
             completionHandler?(logContent.data(using: .utf8))
@@ -199,10 +742,64 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
+    // MARK: - Proxy Network Settings
+
+    private func createProxySettings() -> NETransparentProxyNetworkSettings {
+        let settings = NETransparentProxyNetworkSettings(
+            tunnelRemoteAddress: "127.0.0.1"
+        )
+
+        // Include all TCP and UDP traffic
+        let tcpRule = NENetworkRule(
+            remoteNetwork: nil,
+            remotePrefix: 0,
+            localNetwork: nil,
+            localPrefix: 0,
+            protocol: .TCP,
+            direction: .outbound
+        )
+        let udpRule = NENetworkRule(
+            remoteNetwork: nil,
+            remotePrefix: 0,
+            localNetwork: nil,
+            localPrefix: 0,
+            protocol: .UDP,
+            direction: .outbound
+        )
+        settings.includedNetworkRules = [tcpRule, udpRule]
+
+        // Exclude localhost and LAN traffic
+        var excluded: [NENetworkRule] = []
+        let excludedRanges: [(String, Int)] = [
+            ("127.0.0.0", 8),     // Loopback
+            ("10.0.0.0", 8),      // Private
+            ("172.16.0.0", 12),   // Private
+            ("192.168.0.0", 16),  // Private
+            ("169.254.0.0", 16),  // Link-local
+            ("224.0.0.0", 4),     // Multicast
+            ("100.64.0.0", 10)    // CGNAT
+        ]
+        for (network, prefix) in excludedRanges {
+            excluded.append(
+                NENetworkRule(
+                    remoteNetwork: NWHostEndpoint(
+                        hostname: network, port: "0"
+                    ),
+                    remotePrefix: prefix,
+                    localNetwork: nil,
+                    localPrefix: 0,
+                    protocol: .any,
+                    direction: .outbound
+                )
+            )
+        }
+        settings.excludedNetworkRules = excluded
+
+        return settings
+    }
+
     // MARK: - Config from Provider
 
-    /// Decompress the full YAML config from providerConfiguration and write to disk.
-    /// Falls back to the default config if no compressed data is available.
     private func setupConfigFromProvider() -> String {
         let proto = protocolConfiguration as? NETunnelProviderProtocol
         let providerConfig = proto?.providerConfiguration
@@ -212,98 +809,42 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             return ""
         }
         let configDir = configDirURL.path
-        try? FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            atPath: configDir, withIntermediateDirectories: true
+        )
 
         let config: String
         if let compressed = providerConfig?["configData"] as? Data,
-           let decompressed = try? (compressed as NSData).decompressed(using: .zlib) as Data,
-           let yaml = String(data: decompressed, encoding: .utf8) {
+            let decompressed = try? (compressed as NSData).decompressed(
+                using: .zlib
+            ) as Data,
+            let yaml = String(data: decompressed, encoding: .utf8) {
             config = yaml
-            log("Config from provider: \(compressed.count) -> \(decompressed.count) bytes")
+            log(
+                "Config from provider: \(compressed.count) -> \(decompressed.count) bytes"
+            )
         } else {
             config = ConfigManager.shared.defaultConfig()
             log("No compressed config in provider, using default")
         }
 
         let configPath = configDir + "/config.yaml"
-        try? config.write(toFile: configPath, atomically: true, encoding: .utf8)
+        try? config.write(
+            toFile: configPath, atomically: true, encoding: .utf8
+        )
         log("Config written to \(configPath) (\(config.count) chars)")
 
         return configDir
     }
 
-    // MARK: - TUN Configuration
-
-    private func createTunnelSettings(proxyServerIPs: Set<String> = []) -> NEPacketTunnelNetworkSettings {
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "254.1.1.1")
-
-        // IPv4 - route all traffic through the tunnel
-        let ipv4 = NEIPv4Settings(
-            addresses: [AppConstants.tunAddress],
-            subnetMasks: [AppConstants.tunSubnetMask]
-        )
-        ipv4.includedRoutes = [NEIPv4Route.default()]
-        // Exclude localhost, LAN, and private IP ranges so the proxy engine's
-        // outbound connections and local network traffic bypass the TUN.
-        var excluded = [
-            NEIPv4Route(destinationAddress: "0.0.0.0", subnetMask: "255.0.0.0"),         // 0.0.0.0/8 - Current network
-            NEIPv4Route(destinationAddress: "10.0.0.0", subnetMask: "255.0.0.0"),         // 10.0.0.0/8 - Private
-            NEIPv4Route(destinationAddress: "100.64.0.0", subnetMask: "255.192.0.0"),     // 100.64.0.0/10 - CGNAT
-            NEIPv4Route(destinationAddress: "127.0.0.0", subnetMask: "255.0.0.0"),        // 127.0.0.0/8 - Loopback
-            NEIPv4Route(destinationAddress: "169.254.0.0", subnetMask: "255.255.0.0"),    // 169.254.0.0/16 - Link-local
-            NEIPv4Route(destinationAddress: "172.16.0.0", subnetMask: "255.240.0.0"),     // 172.16.0.0/12 - Private
-            NEIPv4Route(destinationAddress: "192.0.0.0", subnetMask: "255.255.255.0"),    // 192.0.0.0/24 - IETF protocol
-            NEIPv4Route(destinationAddress: "192.0.2.0", subnetMask: "255.255.255.0"),    // 192.0.2.0/24 - Documentation
-            NEIPv4Route(destinationAddress: "192.88.99.0", subnetMask: "255.255.255.0"),  // 192.88.99.0/24 - 6to4 relay
-            NEIPv4Route(destinationAddress: "192.168.0.0", subnetMask: "255.255.0.0"),    // 192.168.0.0/16 - Private
-            NEIPv4Route(destinationAddress: "198.51.100.0", subnetMask: "255.255.255.0"), // 198.51.100.0/24 - Documentation
-            NEIPv4Route(destinationAddress: "203.0.113.0", subnetMask: "255.255.255.0"),  // 203.0.113.0/24 - Documentation
-            NEIPv4Route(destinationAddress: "224.0.0.0", subnetMask: "240.0.0.0"),        // 224.0.0.0/4 - Multicast
-            NEIPv4Route(destinationAddress: "240.0.0.0", subnetMask: "240.0.0.0"),        // 240.0.0.0/4 - Reserved
-            NEIPv4Route(destinationAddress: "255.255.255.255", subnetMask: "255.255.255.255"), // Broadcast
-        ]
-        for ip in proxyServerIPs {
-            excluded.append(NEIPv4Route(destinationAddress: ip, subnetMask: "255.255.255.255"))
-        }
-        ipv4.excludedRoutes = excluded
-        settings.ipv4Settings = ipv4
-
-        // IPv6 - route all IPv6 traffic through the tunnel
-        let ipv6 = NEIPv6Settings(
-            addresses: [AppConstants.tunIPv6Address],
-            networkPrefixLengths: [NSNumber(value: AppConstants.tunIPv6PrefixLength)]
-        )
-        ipv6.includedRoutes = [NEIPv6Route.default()]
-        ipv6.excludedRoutes = [
-            NEIPv6Route(destinationAddress: "::1", networkPrefixLength: 128),             // Loopback
-            NEIPv6Route(destinationAddress: "fc00::", networkPrefixLength: 7),             // Unique local (ULA)
-            NEIPv6Route(destinationAddress: "fe80::", networkPrefixLength: 10),            // Link-local
-            NEIPv6Route(destinationAddress: "ff00::", networkPrefixLength: 8),             // Multicast
-        ]
-        settings.ipv6Settings = ipv6
-
-        // DNS - point to Mihomo's fake-ip DNS server
-        let dns = NEDNSSettings(servers: [AppConstants.tunDNS])
-        dns.matchDomains = [""]
-        settings.dnsSettings = dns
-
-        settings.mtu = NSNumber(value: AppConstants.defaultMTU)
-
-        return settings
-    }
-
     // MARK: - Memory Management
 
-    /// iOS Network Extension has a ~15MB memory limit.
-    /// Periodically trigger Go GC to return memory to the OS.
-    /// Go also runs its own internal GC ticker every 10s, but this ensures
-    /// we also reclaim after any Swift-side allocations or IPC activity.
     private func startMemoryManagement() {
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        let timer = DispatchSource.makeTimerSource(
+            queue: .global(qos: .utility)
+        )
         timer.schedule(deadline: .now() + 10, repeating: 10)
-        timer.setEventHandler {
-            BridgeForceGC()
-        }
+        timer.setEventHandler { BridgeForceGC() }
         timer.resume()
         gcTimer = timer
     }
@@ -315,37 +856,25 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     // MARK: - Helpers
 
-    /// Find the utun file descriptor created by NEPacketTunnelProvider.
-    /// This fd is passed to the Go core so Mihomo can read/write VPN packets directly.
-    private var tunnelFileDescriptor: Int32? {
-        var buf = [CChar](repeating: 0, count: Int(IFNAMSIZ))
-        for fd: Int32 in 0...1024 {
-            var len = socklen_t(buf.count)
-            if getsockopt(fd, 2 /* SYSPROTO_CONTROL */, 2 /* UTUN_OPT_IFNAME */, &buf, &len) == 0
-                && String(cString: buf).hasPrefix("utun") {
-                return fd
-            }
-        }
-        return nil
-    }
-
     private func setupLogging() {
         let level = AppConstants.sharedDefaults
             .string(forKey: "logLevel") ?? "info"
         BridgeUpdateLogLevel(level)
     }
 
-    /// Log traffic counters every 3s for the first 120s after startup.
-    /// This reveals whether the TUN device is actually passing packets.
     private func startDiagnosticLogging() {
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        let timer = DispatchSource.makeTimerSource(
+            queue: .global(qos: .utility)
+        )
         timer.schedule(deadline: .now() + 3, repeating: 3)
         var count = 0
         timer.setEventHandler { [weak self] in
-            let up = BridgeGetUploadTraffic()
-            let down = BridgeGetDownloadTraffic()
+            let upload = BridgeGetUploadTraffic()
+            let download = BridgeGetDownloadTraffic()
             let running = BridgeIsRunning()
-            self?.log("DIAG[\(count)]: running=\(running) upload=\(up) download=\(down)")
+            self?.log(
+                "DIAG[\(count)]: running=\(running) upload=\(upload) download=\(download)"
+            )
             count += 1
             if count >= 40 {
                 self?.diagnosticTimer?.cancel()
@@ -357,75 +886,77 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         diagnosticTimer = timer
     }
 
-    /// Pre-resolve proxy server hostnames to IPs and rewrite the config.
-    /// Must be called BEFORE TUN routes take effect (while DNS still uses
-    /// the physical interface). Returns the set of resolved IPs for route exclusion.
     private func preResolveProxyServers(configPath: String) -> Set<String> {
-        guard var yaml = try? String(contentsOfFile: configPath, encoding: .utf8) else { return [] }
+        guard var yaml = try? String(
+            contentsOfFile: configPath, encoding: .utf8
+        ) else { return [] }
 
-        // Parse proxy entries to find server hostnames
         guard let dict = (try? Yams.load(yaml: yaml)) as? [String: Any],
-              let proxies = dict["proxies"] as? [[String: Any]] else {
-            return []
-        }
+            let proxies = dict["proxies"] as? [[String: Any]]
+        else { return [] }
 
-        // Collect unique hostnames (skip raw IPs)
         var hostToIP: [String: String] = [:]
         var allIPs = Set<String>()
         for proxy in proxies {
-            guard let server = proxy["server"] as? String, !server.isEmpty else { continue }
-            if server.contains(":") { continue } // skip IPv6
-            if let _ = IPv4Address(server) {
+            guard let server = proxy["server"] as? String, !server.isEmpty
+            else { continue }
+            if server.contains(":") { continue }
+            if IPv4Address(server) != nil {
                 allIPs.insert(server)
                 continue
             }
-            if hostToIP[server] != nil { continue } // already resolved
+            if hostToIP[server] != nil { continue }
 
-            // Resolve hostname synchronously (OK because TUN isn't active yet)
-            if let ip = resolveHostnameToIPv4(server) {
-                hostToIP[server] = ip
-                allIPs.insert(ip)
-                log("Resolved proxy server: \(server) -> \(ip)")
+            if let resolvedIP = resolveHostnameToIPv4(server) {
+                hostToIP[server] = resolvedIP
+                allIPs.insert(resolvedIP)
+                log("Resolved proxy server: \(server) -> \(resolvedIP)")
             }
         }
 
-        // Rewrite config: replace hostnames with resolved IPs in proxy entries
-        // so the Trojan/SS adapter connects to IPs directly (no DNS at runtime)
         if !hostToIP.isEmpty {
-            for (hostname, ip) in hostToIP {
+            for (hostname, resolvedIP) in hostToIP {
                 yaml = yaml.replacingOccurrences(
                     of: "server: \(hostname)",
-                    with: "server: \(ip)"
+                    with: "server: \(resolvedIP)"
                 )
-                // Also handle quoted forms
                 yaml = yaml.replacingOccurrences(
                     of: "server: '\(hostname)'",
-                    with: "server: '\(ip)'"
+                    with: "server: '\(resolvedIP)'"
                 )
                 yaml = yaml.replacingOccurrences(
                     of: "server: \"\(hostname)\"",
-                    with: "server: \"\(ip)\""
+                    with: "server: \"\(resolvedIP)\""
                 )
             }
-            try? yaml.write(toFile: configPath, atomically: true, encoding: .utf8)
-            log("Config rewritten with \(hostToIP.count) resolved proxy server IP(s)")
+            try? yaml.write(
+                toFile: configPath, atomically: true, encoding: .utf8
+            )
+            log(
+                "Config rewritten with \(hostToIP.count) resolved proxy server IP(s)"
+            )
         }
 
         return allIPs
     }
 
-    /// Resolve a hostname to its first IPv4 address using CFHost (synchronous).
     private func resolveHostnameToIPv4(_ hostname: String) -> String? {
-        let hostRef = CFHostCreateWithName(nil, hostname as CFString).takeRetainedValue()
+        let hostRef = CFHostCreateWithName(nil, hostname as CFString)
+            .takeRetainedValue()
         var resolved = DarwinBoolean(false)
         CFHostStartInfoResolution(hostRef, .addresses, nil)
-        guard let addresses = CFHostGetAddressing(hostRef, &resolved)?.takeUnretainedValue() as? [Data] else {
-            return nil
-        }
+        guard
+            let addresses = CFHostGetAddressing(hostRef, &resolved)?
+                .takeUnretainedValue() as? [Data]
+        else { return nil }
         for addrData in addresses {
-            guard addrData.count >= MemoryLayout<sockaddr_in>.size else { continue }
+            guard addrData.count >= MemoryLayout<sockaddr_in>.size else {
+                continue
+            }
             var addr = sockaddr_in()
-            _ = withUnsafeMutableBytes(of: &addr) { addrData.copyBytes(to: $0) }
+            _ = withUnsafeMutableBytes(of: &addr) {
+                addrData.copyBytes(to: $0)
+            }
             if addr.sin_family == UInt8(AF_INET) {
                 return String(cString: inet_ntoa(addr.sin_addr))
             }
@@ -438,19 +969,35 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 }
 
-enum PacketTunnelError: LocalizedError {
-    case configDirectoryUnavailable
+// MARK: - Array Safe Subscript
+
+extension Collection {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
+// MARK: - Errors
+
+enum ProviderError: LocalizedError {
     case configNotFound
-    case tunnelFDNotFound
+    case socks5AuthFailed
+    case socks5ConnectFailed
+    case connectionCancelled
+    case unexpectedEOF
 
     var errorDescription: String? {
         switch self {
-        case .configDirectoryUnavailable:
-            return "Shared container directory is not available"
         case .configNotFound:
             return "config.yaml not found. Please configure proxies first."
-        case .tunnelFDNotFound:
-            return "Could not find TUN file descriptor. The VPN tunnel may not have been created."
+        case .socks5AuthFailed:
+            return "SOCKS5 authentication failed"
+        case .socks5ConnectFailed:
+            return "SOCKS5 CONNECT failed"
+        case .connectionCancelled:
+            return "Connection was cancelled"
+        case .unexpectedEOF:
+            return "Unexpected end of data"
         }
     }
 }

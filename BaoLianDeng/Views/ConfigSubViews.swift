@@ -247,3 +247,101 @@ struct AddRuleSheet: View {
         }
     }
 }
+
+// MARK: - Edit Rule Sheet
+
+struct EditRuleSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let groupNames: [String]
+    let rule: EditableRule
+    let onSave: (EditableRule) -> Void
+
+    @State private var type: String
+    @State private var value: String
+    @State private var target: String
+    @State private var noResolve: Bool
+
+    private let ruleTypes = [
+        "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD",
+        "IP-CIDR", "IP-CIDR6", "SRC-IP-CIDR",
+        "GEOIP", "GEOSITE", "MATCH"
+    ]
+
+    init(
+        groupNames: [String], rule: EditableRule,
+        onSave: @escaping (EditableRule) -> Void
+    ) {
+        self.groupNames = groupNames
+        self.rule = rule
+        self.onSave = onSave
+        _type = State(initialValue: rule.type)
+        _value = State(initialValue: rule.value)
+        _target = State(initialValue: rule.target)
+        _noResolve = State(initialValue: rule.noResolve)
+    }
+
+    private var targets: [String] {
+        var result = ["PROXY", "DIRECT", "REJECT"]
+        for name in groupNames where !result.contains(name) {
+            result.append(name)
+        }
+        return result
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("Type", selection: $type) {
+                    ForEach(ruleTypes, id: \.self) { ruleType in
+                        Text(ruleType).tag(ruleType)
+                    }
+                }
+
+                if type != "MATCH" {
+                    TextField(valuePlaceholder, text: $value)
+                        .autocorrectionDisabled()
+                }
+
+                Picker("Target", selection: $target) {
+                    ForEach(targets, id: \.self) { targetName in
+                        Text(targetName).tag(targetName)
+                    }
+                }
+
+                if type.contains("IP") {
+                    Toggle("no-resolve", isOn: $noResolve)
+                }
+            }
+            .navigationTitle("Edit Rule")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        var updated = rule
+                        updated.type = type
+                        updated.value = value
+                        updated.target = target
+                        updated.noResolve = noResolve
+                        onSave(updated)
+                        dismiss()
+                    }
+                    .disabled(type != "MATCH" && value.isEmpty)
+                }
+            }
+        }
+    }
+
+    private var valuePlaceholder: String {
+        switch type {
+        case "DOMAIN": return "example.com"
+        case "DOMAIN-SUFFIX": return "google.com"
+        case "DOMAIN-KEYWORD": return "google"
+        case "IP-CIDR", "IP-CIDR6": return "10.0.0.0/8"
+        case "GEOIP": return "CN"
+        case "GEOSITE": return "google"
+        default: return "Value"
+        }
+    }
+}

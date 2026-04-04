@@ -37,6 +37,7 @@
 		D28CFAAD4562ECF087671BE7 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* Constants.swift */; };
 		DFFA836A5DFCC6D3BFF95EB6 /* BaoLianDengApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001 /* BaoLianDengApp.swift */; };
 		E4A1B2C3D5F6078E9A1B3C5D /* ConfigStyleHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10054 /* ConfigStyleHelpers.swift */; };
+		B10056 /* ConfigListViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10055 /* ConfigListViews.swift */; };
 		EBAC80D31A3CCD3F3C083FDA /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090 /* AppLogger.swift */; };
 		L10100 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B10100 /* Localizable.xcstrings */; };
 		L10101 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B10101 /* InfoPlist.xcstrings */; };
@@ -100,6 +101,7 @@
 		B10100 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		B10101 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		B10054 /* ConfigStyleHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigStyleHelpers.swift; sourceTree = "<group>"; };
+		B10055 /* ConfigListViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigListViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -234,6 +236,7 @@
 				B10051 /* YAMLEditor.swift */,
 				B10053 /* YAMLHighlighter.swift */,
 				B10054 /* ConfigStyleHelpers.swift */,
+				B10055 /* ConfigListViews.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -360,6 +363,7 @@
 				61BC365FA82815F443D0E346 /* YAMLEditor.swift in Sources */,
 				6A3F8B2C7D1E4A059C82E0F1 /* YAMLHighlighter.swift in Sources */,
 				E4A1B2C3D5F6078E9A1B3C5D /* ConfigStyleHelpers.swift in Sources */,
+				B10056 /* ConfigListViews.swift in Sources */,
 				A9840B29BC5EC55F29F0BA38 /* TrafficStore.swift in Sources */,
 				C3DAB7AB1483CF34E41BAAFB /* AppLogger.swift in Sources */,
 				D28CFAAD4562ECF087671BE7 /* Constants.swift in Sources */,
@@ -402,7 +406,7 @@
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = "BaoLianDeng PacketTunnel Developer ID";
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -441,7 +445,7 @@
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = "BaoLianDeng macOS Developer ID";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -476,7 +480,7 @@
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = "BaoLianDeng PacketTunnel Developer ID";
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -515,7 +519,7 @@
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = "BaoLianDeng macOS Developer ID";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",

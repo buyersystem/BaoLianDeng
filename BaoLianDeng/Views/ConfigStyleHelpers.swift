@@ -160,68 +160,48 @@ struct ConfigSectionsView: View {
     let subscriptionProxyGroups: [EditableProxyGroup]
     let subscriptionRules: [EditableRule]
     let isSub: Bool
-    @Binding var showAddGroup: Bool
-    @Binding var showAddRule: Bool
 
     var body: some View {
-        proxyGroupsSection
-        rulesSection
-    }
-
-    private var proxyGroupsSection: some View {
         Section {
-            if isSub {
-                ForEach(subscriptionProxyGroups) { group in
-                    NavigationLink {
-                        ProxyGroupDetailView(
-                            group: .constant(group), isEditable: false
-                        )
-                    } label: { ProxyGroupRowView(group: group) }
-                }
-            } else {
-                ForEach($proxyGroups) { $group in
-                    NavigationLink {
-                        ProxyGroupDetailView(
-                            group: $group, isEditable: true
-                        )
-                    } label: { ProxyGroupRowView(group: group) }
-                }
-                .onDelete { proxyGroups.remove(atOffsets: $0) }
-            }
-        } header: {
-            HStack {
-                Text("Proxy Groups")
-                Spacer()
-                if !isSub {
-                    Button { showAddGroup = true } label: {
-                        Image(systemName: "plus.circle").font(.body)
-                    }
+            NavigationLink {
+                ProxyGroupsListView(
+                    proxyGroups: $proxyGroups,
+                    subscriptionProxyGroups: subscriptionProxyGroups,
+                    isSub: isSub
+                )
+            } label: {
+                HStack {
+                    Image(systemName: "square.stack.3d.up")
+                        .foregroundStyle(.blue)
+                        .frame(width: 24)
+                    Text("Proxy Groups")
+                    Spacer()
+                    let count = isSub
+                        ? subscriptionProxyGroups.count
+                        : proxyGroups.count
+                    Text("\(count)")
+                        .foregroundStyle(.secondary)
                 }
             }
-        }
-    }
 
-    private var rulesSection: some View {
-        Section {
-            if isSub {
-                ForEach(subscriptionRules) { RuleRowView(rule: $0) }
-            } else {
-                ForEach(rules) { RuleRowView(rule: $0) }
-                    .onDelete { rules.remove(atOffsets: $0) }
-                    .onMove { from, dest in
-                        rules.move(fromOffsets: from, toOffset: dest)
-                    }
-            }
-        } header: {
-            HStack {
-                let count = isSub
-                    ? subscriptionRules.count : rules.count
-                Text("Rules (\(count))")
-                Spacer()
-                if !isSub {
-                    Button { showAddRule = true } label: {
-                        Image(systemName: "plus.circle").font(.body)
-                    }
+            NavigationLink {
+                RulesListView(
+                    rules: $rules,
+                    subscriptionRules: subscriptionRules,
+                    proxyGroupNames: proxyGroups.map(\.name),
+                    isSub: isSub
+                )
+            } label: {
+                HStack {
+                    Image(systemName: "list.bullet.rectangle")
+                        .foregroundStyle(.orange)
+                        .frame(width: 24)
+                    Text("Rules")
+                    Spacer()
+                    let count = isSub
+                        ? subscriptionRules.count : rules.count
+                    Text("\(count)")
+                        .foregroundStyle(.secondary)
                 }
             }
         }

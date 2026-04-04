@@ -38,8 +38,6 @@ struct ConfigEditorView: View {
     @State private var errorMessage = ""
     @State private var isSaving = false
     @State private var showSaved = false
-    @State private var showAddGroup = false
-    @State private var showAddRule = false
     @State private var isLoaded = false
     @State private var scrollToTopTrigger = false
     @State private var editorMode: EditorMode = .structured
@@ -67,14 +65,6 @@ struct ConfigEditorView: View {
             .alert("Error", isPresented: $showError) {
                 Button("OK", role: .cancel) {}
             } message: { Text(errorMessage) }
-            .sheet(isPresented: $showAddGroup) {
-                AddProxyGroupSheet { proxyGroups.append($0) }
-            }
-            .sheet(isPresented: $showAddRule) {
-                AddRuleSheet(
-                    groupNames: proxyGroups.map(\.name)
-                ) { rules.append($0) }
-            }
             .overlay { if showSaved { savedToast } }
             .onAppear {
                 guard !isLoaded else { return }
@@ -146,9 +136,7 @@ struct ConfigEditorView: View {
                     rules: $rules,
                     subscriptionProxyGroups: subscriptionProxyGroups,
                     subscriptionRules: subscriptionRules,
-                    isSub: isSub,
-                    showAddGroup: $showAddGroup,
-                    showAddRule: $showAddRule
+                    isSub: isSub
                 ).id("proxyGroupsTop")
             }
             .onChange(of: scrollToTopTrigger) { _, _ in

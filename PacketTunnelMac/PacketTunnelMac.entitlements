@@ -10,7 +10,7 @@
 	<true/>
 	<key>com.apple.developer.networking.networkextension</key>
 	<array>
-		<string>packet-tunnel-provider-systemextension</string>
+		<string>content-filter-provider-systemextension</string>
 	</array>
 </dict>
 </plist>

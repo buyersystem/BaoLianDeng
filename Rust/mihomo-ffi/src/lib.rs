@@ -1,9 +1,5 @@
 mod diagnostics;
-mod dns_table;
-mod doh_client;
 mod logging;
-mod tun2socks;
-
 use mihomo_api::ApiServer;
 use mihomo_listener::MixedListener;
 use mihomo_tunnel::Tunnel;
@@ -118,12 +114,6 @@ pub unsafe extern "C" fn bridge_version() -> *const c_char {
 /// No-op. Kept for Swift compatibility (Swift calls ForceGC every 10s).
 #[no_mangle]
 pub extern "C" fn bridge_force_gc() {}
-
-/// Kept for backward compatibility but no longer used by tun2socks flow.
-#[no_mangle]
-pub extern "C" fn bridge_set_tun_fd(_fd: i32) -> i32 {
-    0
-}
 
 #[no_mangle]
 pub extern "C" fn bridge_is_running() -> bool {
@@ -318,8 +308,6 @@ async fn start_engine_async(
         }));
     }
 
-    // NOTE: No TUN fd listener — tun2socks handles that separately
-
     logging::bridge_log(&format!(
         "start_engine_async: all tasks spawned, handles={}",
         handles.len()
@@ -332,62 +320,10 @@ async fn start_engine_async(
 
 #[no_mangle]
 pub extern "C" fn bridge_stop_proxy() {
-    // Stop tun2socks first
-    tun2socks::stop();
-
     let mut engine = ENGINE.lock();
     if let Some(state) = engine.take() {
         for handle in state._handles {
             handle.abort();
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// tun2socks FFI
-// ---------------------------------------------------------------------------
-
-/// Start the tun2socks on the given TUN fd.
-/// Connects reassembled TCP via SOCKS5 to 127.0.0.1:socks_port
-/// and forwards DNS UDP via DoH.
-///
-/// Call bridge_start_with_external_controller FIRST to start the engine,
-/// then call this to start tun2socks.
-#[no_mangle]
-pub extern "C" fn bridge_start_tun2socks(fd: i32, socks_port: i32, dns_port: i32) -> i32 {
-    logging::bridge_log(&format!(
-        "bridge_start_tun2socks: fd={}, socks={}, dns={}",
-        fd, socks_port, dns_port
-    ));
-
-    if fd < 0 {
-        set_error("invalid file descriptor".to_string());
-        return -1;
-    }
-
-    match tun2socks::start(fd, socks_port as u16, dns_port as u16) {
-        Ok(()) => {
-            logging::bridge_log("bridge_start_tun2socks: started successfully");
-            0
-        }
-        Err(e) => {
-            logging::bridge_log(&format!("bridge_start_tun2socks: ERROR: {}", e));
-            set_error(e);
-            -1
-        }
-    }
-}
-
-/// # Safety
-/// `fd` must be a valid TUN fd. `dns_addr` must be a null-terminated string.
-/// Kept for backward compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn bridge_generate_tun_config(fd: i32, dns_addr: *const c_char) -> *mut c_char {
-    let dns = cstr_to_str(dns_addr);
-    let dns = if dns.is_empty() { "198.18.0.2" } else { dns };
-    let yaml = format!(
-        "tun:\n  enable: true\n  stack: gvisor\n  device: fd://{}\n  auto-route: false\n  auto-detect-interface: false\n  dns-hijack:\n    - \"{}:53\"\n",
-        fd, dns
-    );
-    str_to_cstring_ptr(&yaml)
 }

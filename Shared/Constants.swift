@@ -19,12 +19,6 @@ enum AppConstants {
     static let appGroupIdentifier: String? = nil
     static let tunnelBundleIdentifier = "io.github.baoliandeng.macos.PacketTunnel"
     static let configFileName = "config.yaml"
-    static let defaultMTU = 1500
-    static let tunAddress = "198.18.0.1"
-    static let tunSubnetMask = "255.255.0.0"
-    static let tunDNS = "198.18.0.1"
-    static let tunIPv6Address = "fdfe:dcba:9876::1"
-    static let tunIPv6PrefixLength = 126
     static let externalControllerAddr = "127.0.0.1:9090"
     static let dailyTrafficKey = "dailyTrafficRecords"
     static let subscriptionUsageKey = "subscriptionUsageRecords"
