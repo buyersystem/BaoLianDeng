@@ -44,7 +44,14 @@ macOS VPN proxy app powered by [Mihomo](https://github.com/MetaCubeX/mihomo) (Cl
 
 ## Install
 
-### From DMG (recommended)
+### Homebrew
+
+```bash
+brew tap madeye/BaoLianDeng https://github.com/madeye/BaoLianDeng
+brew install --cask baoliandeng
+```
+
+### From DMG
 
 1. Download the latest DMG from [Releases](https://github.com/madeye/BaoLianDeng/releases/latest)
 2. Open the DMG and drag **BaoLianDeng** to **Applications**

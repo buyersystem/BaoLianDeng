@@ -42,6 +42,11 @@
 		A1B2C3D4E5F60718293A4B5C /* PerAppProxySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10095 /* PerAppProxySettings.swift */; };
 		A1B2C3D4E5F60718293A4B5D /* PerAppProxySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10095 /* PerAppProxySettings.swift */; };
 		A1B2C3D4E5F60718293A4B5E /* PerAppProxySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10096 /* PerAppProxySection.swift */; };
+		B10201 /* SubscriptionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10200 /* SubscriptionModels.swift */; };
+		B10203 /* NodeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10202 /* NodeRow.swift */; };
+		B10205 /* MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10204 /* MainContentView.swift */; };
+		B10207 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10206 /* SidebarView.swift */; };
+		B10209 /* VPNToolbarContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10208 /* VPNToolbarContent.swift */; };
 		T10008 /* PerAppProxySettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10007 /* PerAppProxySettingsTests.swift */; };
 		L10100 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B10100 /* Localizable.xcstrings */; };
 		L10101 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B10101 /* InfoPlist.xcstrings */; };
@@ -115,6 +120,11 @@
 		B10055 /* ConfigListViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigListViews.swift; sourceTree = "<group>"; };
 		B10095 /* PerAppProxySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerAppProxySettings.swift; sourceTree = "<group>"; };
 		B10096 /* PerAppProxySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerAppProxySection.swift; sourceTree = "<group>"; };
+		B10200 /* SubscriptionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionModels.swift; sourceTree = "<group>"; };
+		B10202 /* NodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeRow.swift; sourceTree = "<group>"; };
+		B10204 /* MainContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainContentView.swift; sourceTree = "<group>"; };
+		B10206 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		B10208 /* VPNToolbarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPNToolbarContent.swift; sourceTree = "<group>"; };
 		T10007 /* PerAppProxySettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerAppProxySettingsTests.swift; sourceTree = "<group>"; };
 		T10010 /* BaoLianDengTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BaoLianDengTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -263,6 +273,11 @@
 				B10054 /* ConfigStyleHelpers.swift */,
 				B10055 /* ConfigListViews.swift */,
 				B10096 /* PerAppProxySection.swift */,
+				B10200 /* SubscriptionModels.swift */,
+				B10202 /* NodeRow.swift */,
+				B10204 /* MainContentView.swift */,
+				B10206 /* SidebarView.swift */,
+				B10208 /* VPNToolbarContent.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -423,6 +438,11 @@
 				8D9BF44D7D340ADB5C09AEF9 /* VPNManager.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* PerAppProxySettings.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5E /* PerAppProxySection.swift in Sources */,
+				B10201 /* SubscriptionModels.swift in Sources */,
+				B10203 /* NodeRow.swift in Sources */,
+				B10205 /* MainContentView.swift in Sources */,
+				B10207 /* SidebarView.swift in Sources */,
+				B10209 /* VPNToolbarContent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

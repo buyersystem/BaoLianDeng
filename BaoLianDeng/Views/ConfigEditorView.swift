@@ -50,48 +50,39 @@ struct ConfigEditorView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if editorMode == .structured {
-                    structuredEditor
-                } else {
-                    rawEditor
-                }
+        VStack(spacing: 0) {
+            if editorMode == .structured {
+                structuredEditor
+            } else {
+                rawEditor
             }
-            .toolbar { toolbarContent }
-            .onChange(of: editorMode) { oldMode, newMode in
-                handleModeChange(from: oldMode, to: newMode)
-            }
-            .alert("Error", isPresented: $showError) {
-                Button("OK", role: .cancel) {}
-            } message: { Text(errorMessage) }
-            .overlay { if showSaved { savedToast } }
-            .onAppear {
-                guard !isLoaded else { return }
-                isLoaded = true
+        }
+        .navigationTitle("Config")
+        .toolbar { toolbarContent }
+        .onChange(of: editorMode) { oldMode, newMode in
+            handleModeChange(from: oldMode, to: newMode)
+        }
+        .alert("Error", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(errorMessage) }
+        .overlay { if showSaved { savedToast } }
+        .onAppear {
+            guard !isLoaded else { return }
+            isLoaded = true
+            loadConfig()
+            loadSelectedSubscription()
+        }
+        .onChange(of: source) { _, newSource in
+            if case .subscription = newSource {
                 loadConfig()
                 loadSelectedSubscription()
-            }
-            .onChange(of: source) { _, newSource in
-                if case .subscription = newSource {
-                    loadConfig()
-                    loadSelectedSubscription()
-                }
             }
         }
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            Text("Config").font(.headline)
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
-                    scrollToTopTrigger.toggle()
-                }
-        }
-        ToolbarItem(placement: .automatic) {
+        ToolbarItem(placement: .primaryAction) {
             Picker("Mode", selection: $editorMode) {
                 ForEach(EditorMode.allCases, id: \.self) { mode in
                     Text(mode.rawValue).tag(mode)
@@ -99,12 +90,12 @@ struct ConfigEditorView: View {
             }
             .pickerStyle(.segmented).frame(width: 200)
         }
-        ToolbarItem(placement: .automatic) {
+        ToolbarItem(placement: .primaryAction) {
             if !isSub {
                 Button("Save") { saveConfig() }.disabled(isSaving)
             }
         }
-        ToolbarItem(placement: .automatic) {
+        ToolbarItem(placement: .primaryAction) {
             if !isSub {
                 Button("Reset Default", role: .destructive) {
                     resetConfig()

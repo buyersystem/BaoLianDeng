@@ -19,44 +19,52 @@ struct SettingsView: View {
     @EnvironmentObject var vpnManager: VPNManager
     @AppStorage("logLevel", store: AppConstants.sharedDefaults)
     private var logLevel = "info"
+    @AppStorage("appLanguage")
+    private var appLanguage = ""
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("General") {
-                    Picker("Log Level", selection: $logLevel) {
-                        Text("Silent").tag("silent")
-                        Text("Error").tag("error")
-                        Text("Warning").tag("warning")
-                        Text("Info").tag("info")
-                        Text("Debug").tag("debug")
+        Form {
+            Section("General") {
+                Picker("Language", selection: $appLanguage) {
+                    Text("System Default").tag("")
+                    Text("English").tag("en")
+                    Text("简体中文").tag("zh-Hans")
+                }
+                .onChange(of: appLanguage) { _, newValue in
+                    if newValue.isEmpty {
+                        UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+                    } else {
+                        UserDefaults.standard.set([newValue], forKey: "AppleLanguages")
                     }
                 }
 
-                PerAppProxySection()
-
-                Section("Debug") {
-                    NavigationLink("Tunnel Log") {
-                        TunnelLogView()
-                    }
-                }
-
-                Section("System Extension") {
-                    Button("Uninstall System Extension") {
-                        vpnManager.stop()
-                        vpnManager.deactivateSystemExtension()
-                    }
-                    .foregroundStyle(.red)
-                }
-
-                Section("About") {
-                    NavigationLink("About BaoLianDeng") {
-                        AboutView()
-                    }
+                Picker("Log Level", selection: $logLevel) {
+                    Text("Silent").tag("silent")
+                    Text("Error").tag("error")
+                    Text("Warning").tag("warning")
+                    Text("Info").tag("info")
+                    Text("Debug").tag("debug")
                 }
             }
-            .navigationTitle("Settings")
+
+            PerAppProxySection()
+
+            Section("System Extension") {
+                Button("Uninstall System Extension") {
+                    vpnManager.stop()
+                    vpnManager.deactivateSystemExtension()
+                }
+                .foregroundStyle(.red)
+            }
+
+            Section("About") {
+                NavigationLink("About BaoLianDeng") {
+                    AboutView()
+                }
+            }
         }
+        .formStyle(.grouped)
+        .navigationTitle("Settings")
     }
 }
 

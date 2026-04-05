@@ -26,29 +26,11 @@ struct BaoLianDengApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TabView {
-                HomeView()
-                    .tabItem {
-                        Label("Home", systemImage: "house.fill")
-                    }
-
-                ConfigEditorView()
-                    .tabItem {
-                        Label("Config", systemImage: "doc.text.fill")
-                    }
-
-                TrafficView()
-                    .tabItem {
-                        Label("Data", systemImage: "chart.bar.fill")
-                    }
-
-                SettingsView()
-                    .tabItem {
-                        Label("Settings", systemImage: "gearshape.fill")
-                    }
-            }
-            .environmentObject(vpnManager)
-            .environmentObject(trafficStore)
+            MainContentView()
+                .environmentObject(vpnManager)
+                .environmentObject(trafficStore)
         }
+        .defaultSize(width: 900, height: 600)
+        .windowToolbarStyle(.unified)
     }
 }

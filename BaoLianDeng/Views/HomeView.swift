@@ -36,100 +36,97 @@ struct HomeView: View {
     @State private var showFileImporter = false
 
     var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                List {
-                    connectSection
+        ScrollViewReader { proxy in
+            List {
+                extensionStatusSection
 
-                    Section(header:
-                        Text("Subscriptions")
-                            .id("subscriptionsTop")
-                    ) {
-                        subscriptionSections
+                routingSection
+
+                Section(header:
+                    Text("Subscriptions")
+                        .id("subscriptionsTop")
+                ) {
+                    subscriptionSections
+                }
+            }
+            .listStyle(.inset(alternatesRowBackgrounds: true))
+            .onAppear { scrollProxy = proxy }
+        }
+        .navigationTitle("Subscriptions")
+        .onTapGesture(count: 2) {
+            withAnimation {
+                scrollProxy?.scrollTo("subscriptionsTop", anchor: .top)
+            }
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.yaml],
+            allowsMultipleSelection: false
+        ) { result in
+            importConfigFile(result)
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Add Subscription") {
+                        showAddSubscription = true
+                    }
+                    Button("Import Config File") {
+                        showFileImporter = true
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await reloadAllSubscriptions() }
+                } label: {
+                    if isReloading {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
                     }
                 }
-                .onAppear { scrollProxy = proxy }
+                .disabled(subscriptions.isEmpty || isReloading)
             }
-            .navigationTitle("BaoLianDeng")
-            .onTapGesture(count: 2) {
-                withAnimation {
-                    scrollProxy?.scrollTo("subscriptionsTop", anchor: .top)
+        }
+        .alert(item: $reloadResult) { result in
+            Alert(
+                title: Text("Reload Complete"),
+                message: Text(result.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .sheet(isPresented: $showAddSubscription, onDismiss: {
+            fetchNewSubscriptions()
+        }) {
+            AddSubscriptionView(subscriptions: $subscriptions)
+        }
+        .sheet(item: $editingSubscription) { sub in
+            EditSubscriptionView(subscription: sub) { updated in
+                if let i = subscriptions.firstIndex(where: { $0.id == updated.id }) {
+                    subscriptions[i] = updated
+                    saveSubscriptions()
                 }
             }
-            .fileImporter(
-                isPresented: $showFileImporter,
-                allowedContentTypes: [.yaml],
-                allowsMultipleSelection: false
-            ) { result in
-                importConfigFile(result)
-            }
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Menu {
-                        Button("Add Subscription") {
-                            showAddSubscription = true
-                        }
-                        Button("Import Config File") {
-                            showFileImporter = true
-                        }
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+        }
+        .onAppear {
+            loadSubscriptions()
+        }
+        .overlay {
+            if showToast {
+                VStack {
+                    Spacer()
+                    Text(toastMessage)
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(.thinMaterial)
+                        .clipShape(Capsule())
+                        .padding(.bottom, 80)
                 }
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        Task { await reloadAllSubscriptions() }
-                    } label: {
-                        if isReloading {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                    }
-                    .disabled(subscriptions.isEmpty || isReloading)
-                }
-            }
-            .alert(item: $reloadResult) { result in
-                Alert(
-                    title: Text("Reload Complete"),
-                    message: Text(result.message),
-                    dismissButton: .default(Text("OK"))
-                )
-            }
-            .sheet(isPresented: $showAddSubscription, onDismiss: {
-                fetchNewSubscriptions()
-            }) {
-                AddSubscriptionView(subscriptions: $subscriptions)
-            }
-            .sheet(item: $editingSubscription) { sub in
-                EditSubscriptionView(subscription: sub) { updated in
-                    if let i = subscriptions.firstIndex(where: { $0.id == updated.id }) {
-                        subscriptions[i] = updated
-                        saveSubscriptions()
-                    }
-                }
-            }
-            .onAppear {
-                loadSubscriptions()
-                vpnManager.checkExtensionStatus()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                vpnManager.checkExtensionStatus()
-            }
-            .overlay {
-                if showToast {
-                    VStack {
-                        Spacer()
-                        Text(toastMessage)
-                            .font(.subheadline.weight(.medium))
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
-                            .background(.thinMaterial)
-                            .clipShape(Capsule())
-                            .padding(.bottom, 80)
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
@@ -142,63 +139,45 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Connect Section
+    // MARK: - Extension Status
 
-    private var connectSection: some View {
+    private var extensionStatusSection: some View {
         Section {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(statusText)
-                        .font(.headline)
-                    if let node = selectedNode {
-                        Text(node)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            if !vpnManager.extensionEnabled {
+                Button {
+                    showExtensionHelp = true
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
+                        NSWorkspace.shared.open(url)
                     }
+                } label: {
+                    HStack {
+                        Image(systemName: "exclamationmark.shield.fill")
+                        Text(String(localized: "Enable Network Extension"))
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity)
                 }
-
-                Spacer()
-
-                Toggle("", isOn: Binding(
-                    get: { vpnManager.isConnected },
-                    set: { _ in vpnManager.toggle() }
-                ))
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .disabled(vpnManager.isProcessing)
+                .buttonStyle(.plain)
+                .alert("Enable Network Extension", isPresented: $showExtensionHelp) {
+                    Button("OK") {}
+                } message: {
+                    Text("System Settings has been opened.\n\nPlease go to Network Extensions and toggle on BaoLianDeng to enable the VPN.")
+                }
             }
-            .padding(.vertical, 4)
 
             if let err = vpnManager.errorMessage {
                 Text(err)
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+        }
+    }
 
-            Button {
-                if !vpnManager.extensionEnabled {
-                    showExtensionHelp = true
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-            } label: {
-                HStack {
-                    Image(systemName: vpnManager.extensionEnabled ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                    Text(vpnManager.extensionEnabled ? String(localized: "Network Extension Enabled") : String(localized: "Enable Network Extension"))
-                        .font(.subheadline)
-                }
-                .foregroundStyle(vpnManager.extensionEnabled ? .green : .orange)
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.plain)
-            .disabled(vpnManager.extensionEnabled)
-            .alert("Enable Network Extension", isPresented: $showExtensionHelp) {
-                Button("OK") {}
-            } message: {
-                Text("System Settings has been opened.\n\nPlease go to Network Extensions and toggle on BaoLianDeng to enable the VPN.")
-            }
+    // MARK: - Routing
 
+    private var routingSection: some View {
+        Section {
             Picker("Routing", selection: $selectedMode) {
                 ForEach(ProxyMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
@@ -318,7 +297,6 @@ struct HomeView: View {
                                 selectedNode = node.name
                                 saveSelectedNode(node.name)
                                 if selectedSubscriptionID != sub.id {
-                                    // Switch subscription: merge its config, then select node
                                     selectSubscription(sub)
                                 }
                                 vpnManager.selectNode(node.name)
@@ -332,23 +310,10 @@ struct HomeView: View {
 
     // MARK: - Helpers
 
-    private var statusText: String {
-        switch vpnManager.status {
-        case .connected: return String(localized: "Connected")
-        case .connecting: return String(localized: "Connecting...")
-        case .disconnecting: return String(localized: "Disconnecting...")
-        case .disconnected: return String(localized: "Not Connected")
-        case .reasserting: return String(localized: "Reconnecting...")
-        case .invalid: return String(localized: "Not Configured")
-        @unknown default: return String(localized: "Unknown")
-        }
-    }
-
     private func selectSubscription(_ sub: Subscription) {
         selectedSubscriptionID = sub.id
         AppConstants.sharedDefaults
             .set(sub.id.uuidString, forKey: "selectedSubscriptionID")
-        // Auto-select first node if current node isn't from this subscription
         let nodeNames = Set(sub.nodes.map(\.name))
         if selectedNode == nil || !nodeNames.contains(selectedNode ?? "") {
             if let first = sub.nodes.first {
@@ -356,7 +321,6 @@ struct HomeView: View {
                 saveSelectedNode(first.name)
             }
         }
-        // Apply the subscription YAML to config.yaml so the VPN uses it
         if let raw = sub.rawContent {
             Task.detached {
                 let merged = (try? ConfigManager.shared.applySubscriptionConfig(raw)) ?? ""
@@ -374,7 +338,6 @@ struct HomeView: View {
                       var subs = try? JSONDecoder().decode([Subscription].self, from: data) else {
                     return nil
                 }
-                // Re-parse nodes for subscriptions that have raw content but empty nodes
                 var needsSave = false
                 for i in subs.indices {
                     if subs[i].nodes.isEmpty, let raw = subs[i].rawContent, !raw.isEmpty {
@@ -403,13 +366,11 @@ struct HomeView: View {
             if let id = result.selectedID {
                 selectedSubscriptionID = id
                 expandedSubscriptionIDs.insert(id)
-                // Apply cached subscription config to config.yaml on launch
                 if let sub = result.subs.first(where: { $0.id == id }),
                    let raw = sub.rawContent {
                     try? ConfigManager.shared.applySubscriptionConfig(raw)
                 }
             }
-            // Auto-fetch subscriptions with missing or invalid rawContent
             fetchNewSubscriptions()
         }
     }
@@ -428,9 +389,6 @@ struct HomeView: View {
             .set(name, forKey: "selectedNode")
     }
 
-    /// Reload Mihomo's running config via the external controller REST API.
-    /// Passes the YAML as an inline payload so Mihomo doesn't need filesystem access
-    /// to the main app's sandboxed container.
     static func reloadMihomoConfig(with yaml: String) async {
         guard let url = URL(string: "http://\(AppConstants.externalControllerAddr)/configs?force=true") else { return }
         var request = URLRequest(url: url)
@@ -535,7 +493,6 @@ struct HomeView: View {
                     subscriptions[i].isUpdating = false
                 }
                 saveSubscriptions()
-                // Apply to config.yaml if this is the selected subscription
                 if id == selectedSubscriptionID {
                     let merged = (try? ConfigManager.shared.applySubscriptionConfig(result.raw)) ?? ""
                     await Self.reloadMihomoConfig(with: merged)
@@ -586,7 +543,6 @@ struct HomeView: View {
         }
 
         saveSubscriptions()
-        // Apply the selected subscription's updated config to config.yaml
         if let selID = selectedSubscriptionID,
            let sub = subscriptions.first(where: { $0.id == selID }),
            let raw = sub.rawContent {
@@ -613,360 +569,6 @@ struct HomeView: View {
         let nodes = SubscriptionParser.parse(text)
         AppLogger.log(AppLogger.network, category: "network", "fetchSubscription parsed \(nodes.count) nodes")
         return (nodes, text)
-    }
-}
-
-// MARK: - Node Row
-
-struct NodeRow: View {
-    let node: ProxyNode
-    let isSelected: Bool
-    let onSelect: () -> Void
-
-    var body: some View {
-        Button(action: onSelect) {
-            HStack(spacing: 12) {
-                Image(systemName: node.typeIcon)
-                    .font(.system(size: 14))
-                    .foregroundStyle(node.typeColor)
-                    .frame(width: 24)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(node.name)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                    Text(node.type)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if let delay = node.delay {
-                    Text("\(delay) ms")
-                        .font(.caption)
-                        .foregroundStyle(delayColor(delay))
-                }
-
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.blue)
-                }
-            }
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func delayColor(_ delay: Int) -> Color {
-        if delay < 200 { return .green }
-        if delay < 500 { return .orange }
-        return .red
-    }
-}
-
-// MARK: - Models
-
-struct Subscription: Identifiable, Codable {
-    var id = UUID()
-    var name: String
-    var url: String
-    var nodes: [ProxyNode]
-    var rawContent: String?
-    var isUpdating: Bool = false
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, url, nodes, rawContent
-    }
-}
-
-struct ProxyNode: Identifiable, Codable {
-    var id = UUID()
-    var name: String
-    var type: String
-    var server: String
-    var port: Int
-    var delay: Int?
-
-    var typeIcon: String {
-        switch type.lowercased() {
-        case "ss", "shadowsocks": return "lock.shield"
-        case "vmess": return "v.circle"
-        case "vless": return "v.circle.fill"
-        case "trojan": return "bolt.shield"
-        case "hysteria", "hysteria2": return "hare"
-        case "wireguard": return "network.badge.shield.half.filled"
-        default: return "globe"
-        }
-    }
-
-    var typeColor: Color {
-        switch type.lowercased() {
-        case "ss", "shadowsocks": return .blue
-        case "vmess": return .purple
-        case "vless": return .indigo
-        case "trojan": return .red
-        case "hysteria", "hysteria2": return .orange
-        case "wireguard": return .green
-        default: return .gray
-        }
-    }
-}
-
-// MARK: - Add Subscription Sheet
-
-struct AddSubscriptionView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var subscriptions: [Subscription]
-    @State private var name = ""
-    @State private var url = ""
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Subscription Info") {
-                    TextField("Name", text: $name)
-                    TextField("URL", text: $url)
-                        .autocorrectionDisabled()
-                }
-
-                Section {
-                    Text("Enter a subscription URL to import proxy nodes. Supported formats: Clash YAML, base64-encoded links.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .navigationTitle("Add Subscription")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
-                        addSubscription()
-                        dismiss()
-                    }
-                    .disabled(name.isEmpty || url.isEmpty)
-                }
-            }
-        }
-    }
-
-    private func addSubscription() {
-        let sub = Subscription(name: name, url: url, nodes: [])
-        subscriptions.append(sub)
-        let snapshot = subscriptions
-        Task.detached(priority: .background) {
-            guard let data = try? JSONEncoder().encode(snapshot) else { return }
-            AppConstants.sharedDefaults
-                .set(data, forKey: "subscriptions")
-        }
-    }
-}
-
-// MARK: - Reload Result
-
-struct ReloadResult: Identifiable {
-    let id = UUID()
-    let succeeded: [String]
-    let failed: [(String, String)]
-
-    var message: String {
-        var parts: [String] = []
-        if !succeeded.isEmpty {
-            parts.append("✓ \(succeeded.joined(separator: ", "))")
-        }
-        if !failed.isEmpty {
-            let names = failed.map { "\($0.0): \($0.1)" }.joined(separator: "\n")
-            parts.append("✗ \(names)")
-        }
-        return parts.joined(separator: "\n")
-    }
-}
-
-// MARK: - Subscription Parser
-
-enum SubscriptionParser {
-    static func parse(_ text: String) -> [ProxyNode] {
-        // Normalize CRLF / bare CR to LF so trailing \r doesn't break value parsing
-        let normalized = text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-        let lines = normalized.components(separatedBy: "\n")
-        var nodes: [ProxyNode] = []
-        var inProxies = false
-        var current: [String: String] = [:]
-
-        AppLogger.log(AppLogger.parser, category: "parser", "total lines: \(lines.count), text length: \(text.count)")
-
-        for (lineNum, line) in lines.enumerated() {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            if line.hasPrefix("proxies:") {
-                inProxies = true
-                AppLogger.log(AppLogger.parser, category: "parser", "found 'proxies:' at line \(lineNum)")
-                continue
-            }
-            // Top-level key ends the proxies section
-            if inProxies, !line.hasPrefix(" "), !line.isEmpty, line.contains(":") {
-                AppLogger.log(AppLogger.parser, category: "parser", "proxies section ended at line \(lineNum): '\(String(line.prefix(80)))'")
-                if let node = makeNode(from: current) { nodes.append(node) }
-                current = [:]
-                inProxies = false
-                continue
-            }
-            guard inProxies else { continue }
-
-            if trimmed == "-" {
-                if let node = makeNode(from: current) { nodes.append(node) }
-                current = [:]
-            } else if trimmed.hasPrefix("- {") && trimmed.hasSuffix("}") {
-                if let node = makeNode(from: current) { nodes.append(node) }
-                current = [:]
-                let inner = String(trimmed.dropFirst(3).dropLast())
-                for pair in splitFlowMapping(inner) {
-                    parseKV(pair, into: &current)
-                }
-            } else if trimmed.hasPrefix("- ") {
-                if let node = makeNode(from: current) { nodes.append(node) }
-                current = [:]
-                parseKV(String(trimmed.dropFirst(2)), into: &current)
-            } else {
-                parseKV(trimmed, into: &current)
-            }
-        }
-        if let node = makeNode(from: current) { nodes.append(node) }
-        AppLogger.log(AppLogger.parser, category: "parser", "result: \(nodes.count) nodes parsed")
-        if nodes.isEmpty {
-            // Dump first few proxies-section lines for debugging
-            var proxiesStart = -1
-            for (i, l) in lines.enumerated() {
-                if l.hasPrefix("proxies:") { proxiesStart = i; break }
-            }
-            if proxiesStart >= 0 {
-                let end = min(proxiesStart + 10, lines.count)
-                for i in proxiesStart..<end {
-                    AppLogger.log(AppLogger.parser, category: "parser", "line \(i): '\(lines[i])'")
-                }
-            } else {
-                AppLogger.log(AppLogger.parser, category: "parser", "WARNING: no 'proxies:' section found in text")
-                // Log first 10 lines to see what we got
-                for i in 0..<min(10, lines.count) {
-                    AppLogger.log(AppLogger.parser, category: "parser", "line \(i): '\(lines[i])'")
-                }
-            }
-        }
-        return nodes
-    }
-
-    private static func parseKV(_ s: String, into dict: inout [String: String]) {
-        guard let idx = s.firstIndex(of: ":") else { return }
-        let key = String(s[..<idx]).trimmingCharacters(in: .whitespaces)
-        var value = String(s[s.index(after: idx)...]).trimmingCharacters(in: .whitespaces)
-        if value.count >= 2,
-           (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
-           (value.hasPrefix("'") && value.hasSuffix("'")) {
-            value = String(value.dropFirst().dropLast())
-        }
-        if !key.isEmpty { dict[key] = value }
-    }
-
-    /// Split a YAML flow mapping interior on commas, respecting quoted values.
-    /// e.g. `name: "a, b", type: ss` → [`name: "a, b"`, `type: ss`]
-    private static func splitFlowMapping(_ s: String) -> [String] {
-        var parts: [String] = []
-        var current = ""
-        var inQuote: Character? = nil
-        for ch in s {
-            if inQuote != nil {
-                current.append(ch)
-                if ch == inQuote { inQuote = nil }
-            } else if ch == "\"" || ch == "'" {
-                inQuote = ch
-                current.append(ch)
-            } else if ch == "," {
-                parts.append(current.trimmingCharacters(in: .whitespaces))
-                current = ""
-            } else {
-                current.append(ch)
-            }
-        }
-        let last = current.trimmingCharacters(in: .whitespaces)
-        if !last.isEmpty { parts.append(last) }
-        return parts
-    }
-
-    private static func makeNode(from dict: [String: String]) -> ProxyNode? {
-        guard !dict.isEmpty else { return nil }
-        guard let name = dict["name"] else {
-            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: missing 'name', keys=\(dict.keys.sorted().joined(separator: ","))")
-            return nil
-        }
-        guard let type_ = dict["type"] else {
-            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: missing 'type' for '\(name)'")
-            return nil
-        }
-        guard let server = dict["server"] else {
-            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: missing 'server' for '\(name)'")
-            return nil
-        }
-        guard let portStr = dict["port"] else {
-            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: missing 'port' for '\(name)'")
-            return nil
-        }
-        guard let port = Int(portStr) else {
-            AppLogger.log(AppLogger.parser, category: "parser", "makeNode FAIL: invalid port '\(portStr)' for '\(name)'")
-            return nil
-        }
-        return ProxyNode(name: name, type: type_, server: server, port: port)
-    }
-}
-
-// MARK: - Edit Subscription Sheet
-
-struct EditSubscriptionView: View {
-    @Environment(\.dismiss) private var dismiss
-    let subscription: Subscription
-    let onSave: (Subscription) -> Void
-
-    @State private var name: String
-    @State private var url: String
-
-    init(subscription: Subscription, onSave: @escaping (Subscription) -> Void) {
-        self.subscription = subscription
-        self.onSave = onSave
-        _name = State(initialValue: subscription.name)
-        _url = State(initialValue: subscription.url)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Subscription Info") {
-                    TextField("Name", text: $name)
-                    TextField("URL", text: $url)
-                        .autocorrectionDisabled()
-                }
-            }
-            .navigationTitle("Edit Subscription")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        var updated = subscription
-                        updated.name = name
-                        updated.url = url
-                        onSave(updated)
-                        dismiss()
-                    }
-                    .disabled(name.isEmpty || url.isEmpty)
-                }
-            }
-        }
     }
 }
 

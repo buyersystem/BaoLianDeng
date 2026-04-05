@@ -21,30 +21,28 @@ struct TrafficView: View {
     @EnvironmentObject var trafficStore: TrafficStore
 
     var body: some View {
-        NavigationStack {
-            List {
-                sessionSection
-                chartSection
-                monthlySummarySection
-                subscriptionUsageSection
-                statusSection
+        List {
+            sessionSection
+            chartSection
+            monthlySummarySection
+            subscriptionUsageSection
+            statusSection
+        }
+        .navigationTitle("Traffic & Data")
+        .onAppear {
+            if vpnManager.isConnected {
+                trafficStore.startPolling()
             }
-            .navigationTitle("Data")
-            .onAppear {
-                if vpnManager.isConnected {
-                    trafficStore.startPolling()
-                }
-            }
-            .onDisappear {
+        }
+        .onDisappear {
+            trafficStore.stopPolling()
+        }
+        .onChange(of: vpnManager.isConnected) { _, connected in
+            if connected {
+                trafficStore.resetSession()
+                trafficStore.startPolling()
+            } else {
                 trafficStore.stopPolling()
-            }
-            .onChange(of: vpnManager.isConnected) { _, connected in
-                if connected {
-                    trafficStore.resetSession()
-                    trafficStore.startPolling()
-                } else {
-                    trafficStore.stopPolling()
-                }
             }
         }
     }

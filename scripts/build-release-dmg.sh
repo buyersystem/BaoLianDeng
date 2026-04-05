@@ -167,6 +167,14 @@ rm -f "$RW_DMG"
 IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
 codesign --sign "$IDENTITY" --timestamp "$DMG_PATH"
 
+echo "=== Step 6: Notarize DMG ==="
+xcrun notarytool submit "$DMG_PATH" \
+  --key "$ASC_KEY_P8_PATH" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" \
+  --wait
+
+echo "Stapling DMG..."
+xcrun stapler staple "$DMG_PATH"
+
 DMG_SIZE=$(du -h "$DMG_PATH" | cut -f1)
 echo ""
 echo "=== Done ==="
