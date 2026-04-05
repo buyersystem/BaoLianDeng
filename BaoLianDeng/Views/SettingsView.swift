@@ -33,6 +33,8 @@ struct SettingsView: View {
                     }
                 }
 
+                PerAppProxySection()
+
                 Section("Debug") {
                     NavigationLink("Tunnel Log") {
                         TunnelLogView()

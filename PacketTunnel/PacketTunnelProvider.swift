@@ -55,6 +55,8 @@ class PacketTunnelProvider: NETransparentProxyProvider {
     private var diagnosticTimer: DispatchSourceTimer?
     private var logTrimTimer: DispatchSourceTimer?
     private let dnsTable = DNSTable()
+    private var perAppSettings: PerAppProxySettings?
+    private var perAppBundleIDSet: Set<String> = []
 
     private static let socksHost = "127.0.0.1"
     private static let socksPort: UInt16 = 7890
@@ -181,6 +183,14 @@ class PacketTunnelProvider: NETransparentProxyProvider {
     // MARK: - Flow Handling
 
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
+        // Per-app filtering: return false to let bypassed flows connect directly
+        if let settings = perAppSettings {
+            let appID = flow.metaData.sourceAppSigningIdentifier
+            if !settings.shouldProxy(bundleID: appID, knownBundleIDs: perAppBundleIDSet) {
+                return false
+            }
+        }
+
         if let tcpFlow = flow as? NEAppProxyTCPFlow {
             handleTCPFlow(tcpFlow)
             return true
@@ -837,6 +847,14 @@ class PacketTunnelProvider: NETransparentProxyProvider {
             toFile: configPath, atomically: true, encoding: .utf8
         )
         log("Config written to \(configPath) (\(config.count) chars)")
+
+        // Load per-app proxy settings
+        if let perAppData = providerConfig?["perAppProxy"] as? Data,
+           let settings = try? JSONDecoder().decode(PerAppProxySettings.self, from: perAppData) {
+            self.perAppSettings = settings
+            self.perAppBundleIDSet = Set(settings.apps.map(\.bundleID))
+            log("Per-app proxy: enabled=\(settings.enabled) mode=\(settings.mode.rawValue) apps=\(settings.apps.count)")
+        }
 
         return configDir
     }

@@ -22,6 +22,7 @@ enum AppConstants {
     static let externalControllerAddr = "127.0.0.1:9090"
     static let dailyTrafficKey = "dailyTrafficRecords"
     static let subscriptionUsageKey = "subscriptionUsageRecords"
+    static let perAppProxySettingsKey = "perAppProxySettings"
 
     /// Shared UserDefaults via app group suite.
     static var sharedDefaults: UserDefaults {

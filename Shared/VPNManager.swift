@@ -443,8 +443,30 @@ final class VPNManager: NSObject, ObservableObject {
             dbg("passSettings: \(yamlData.count) -> \(compressed.count) bytes (zlib)")
         }
 
+        // Pass per-app proxy settings as a separate JSON blob
+        if let perAppData = defaults.data(forKey: AppConstants.perAppProxySettingsKey) {
+            providerConfig["perAppProxy"] = perAppData
+        }
+
         proto.providerConfiguration = providerConfig
         manager?.protocolConfiguration = proto
+    }
+
+    /// Restart the tunnel if currently connected so new settings take effect.
+    func restartIfConnected() {
+        guard isConnected else { return }
+        isProcessing = true
+        manager?.connection.stopVPNTunnel()
+        DispatchQueue.global().async { [weak self] in
+            for _ in 0..<50 {
+                if self?.manager?.connection.status == .disconnected { break }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            DispatchQueue.main.async {
+                self?.isProcessing = false
+                self?.start()
+            }
+        }
     }
 
     private func openNetworkExtensionSettings() {

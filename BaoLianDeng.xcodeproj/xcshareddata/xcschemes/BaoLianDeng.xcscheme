@@ -51,6 +51,16 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "T10001"
+               BuildableName = "BaoLianDengTests.xctest"
+               BlueprintName = "BaoLianDengTests"
+               ReferencedContainer = "container:BaoLianDeng.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
