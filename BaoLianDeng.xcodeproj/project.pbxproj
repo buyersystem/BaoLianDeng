@@ -25,7 +25,7 @@
 		8D9BF44D7D340ADB5C09AEF9 /* VPNManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009 /* VPNManager.swift */; };
 		9161E23D345558ED5649452F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10010 /* Assets.xcassets */; };
 		9C1CFB15DEC224B8210EA2E9 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* Constants.swift */; };
-		9EAAFF911784E9AE012953A3 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020 /* PacketTunnelProvider.swift */; };
+		9EAAFF911784E9AE012953A3 /* TransparentProxyProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020 /* TransparentProxyProvider.swift */; };
 		A11E11AF2CAB6611B7442CD4 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4E02415D2E45FB235C0EF142 /* Cocoa.framework */; };
 		A9840B29BC5EC55F29F0BA38 /* TrafficStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060 /* TrafficStore.swift */; };
 		AC0B915E8C1239813ABF4AB7 /* TunnelLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10035 /* TunnelLogView.swift */; };
@@ -33,7 +33,7 @@
 		C3DAB7AB1483CF34E41BAAFB /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090 /* AppLogger.swift */; };
 		F0MAIN0001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 881BF3538A657F9F7F3951E8 /* main.swift */; };
 		C715B3A41E6034141A9329BE /* MihomoCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10030 /* MihomoCore.xcframework */; };
-		CEE9200E5015BA697A46FD4A /* PacketTunnel.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 259DB0A8D1BC3A31D635256A /* PacketTunnel.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		CEE9200E5015BA697A46FD4A /* TransparentProxy.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 259DB0A8D1BC3A31D635256A /* TransparentProxy.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D28CFAAD4562ECF087671BE7 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* Constants.swift */; };
 		DFFA836A5DFCC6D3BFF95EB6 /* BaoLianDengApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001 /* BaoLianDengApp.swift */; };
 		E4A1B2C3D5F6078E9A1B3C5D /* ConfigStyleHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10054 /* ConfigStyleHelpers.swift */; };
@@ -54,7 +54,7 @@
 			containerPortal = E10001 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 037A5AF56A256698DCED8763;
-			remoteInfo = PacketTunnel;
+			remoteInfo = TransparentProxy;
 		};
 		T10011 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -72,7 +72,7 @@
 			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
 			dstSubfolderSpec = 16;
 			files = (
-				CEE9200E5015BA697A46FD4A /* PacketTunnel.systemextension in Embed System Extensions */,
+				CEE9200E5015BA697A46FD4A /* TransparentProxy.systemextension in Embed System Extensions */,
 			);
 			name = "Embed System Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -80,11 +80,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		259DB0A8D1BC3A31D635256A /* PacketTunnel.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; name = PacketTunnel.systemextension; path = PacketTunnel.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		259DB0A8D1BC3A31D635256A /* TransparentProxy.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; name = TransparentProxy.systemextension; path = TransparentProxy.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		4E02415D2E45FB235C0EF142 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
-		720E19EEF39E6C95A95649DA /* PacketTunnelMac.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PacketTunnelMac.entitlements; sourceTree = "<group>"; };
+		720E19EEF39E6C95A95649DA /* TransparentProxyMac.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = TransparentProxyMac.entitlements; sourceTree = "<group>"; };
 		809DB4CA51000087EE0949AF /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		881BF3538A657F9F7F3951E8 /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = main.swift; path = PacketTunnelMac/main.swift; sourceTree = "<group>"; };
+		881BF3538A657F9F7F3951E8 /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = main.swift; path = TransparentProxyMac/main.swift; sourceTree = "<group>"; };
 		8A37D4B4A6176DB152B15D42 /* BaoLianDeng.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BaoLianDeng.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9677D8DCB6006F09D5E716D6 /* SystemExtensions.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemExtensions.framework; path = System/Library/Frameworks/SystemExtensions.framework; sourceTree = SDKROOT; };
 		B10001 /* BaoLianDengApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaoLianDengApp.swift; sourceTree = "<group>"; };
@@ -99,7 +99,7 @@
 		B10010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10012 /* BaoLianDeng.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BaoLianDeng.entitlements; sourceTree = "<group>"; };
-		B10020 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		B10020 /* TransparentProxyProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransparentProxyProvider.swift; sourceTree = "<group>"; };
 		B10030 /* MihomoCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = MihomoCore.xcframework; sourceTree = "<group>"; };
 		B10035 /* TunnelLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelLogView.swift; sourceTree = "<group>"; };
 		B10040 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
@@ -160,13 +160,13 @@
 			name = "OS X";
 			sourceTree = "<group>";
 		};
-		8187F3BB8FCEA36AC93E802C /* PacketTunnelMac */ = {
+		8187F3BB8FCEA36AC93E802C /* TransparentProxyMac */ = {
 			isa = PBXGroup;
 			children = (
-				720E19EEF39E6C95A95649DA /* PacketTunnelMac.entitlements */,
+				720E19EEF39E6C95A95649DA /* TransparentProxyMac.entitlements */,
 				809DB4CA51000087EE0949AF /* Info.plist */,
 			);
-			path = PacketTunnelMac;
+			path = TransparentProxyMac;
 			sourceTree = "<group>";
 		};
 		G10001 = {
@@ -175,12 +175,12 @@
 				B10070 /* Local.xcconfig */,
 				G10002 /* BaoLianDeng */,
 				T10009 /* BaoLianDengTests */,
-				G10003 /* PacketTunnel */,
+				G10003 /* TransparentProxy */,
 				G10004 /* Shared */,
 				G10005 /* Framework */,
 				G10006 /* Frameworks */,
 				G10007 /* Products */,
-				8187F3BB8FCEA36AC93E802C /* PacketTunnelMac */,
+				8187F3BB8FCEA36AC93E802C /* TransparentProxyMac */,
 				881BF3538A657F9F7F3951E8 /* main.swift */,
 			);
 			sourceTree = "<group>";
@@ -200,12 +200,12 @@
 			path = BaoLianDeng;
 			sourceTree = "<group>";
 		};
-		G10003 /* PacketTunnel */ = {
+		G10003 /* TransparentProxy */ = {
 			isa = PBXGroup;
 			children = (
-				B10020 /* PacketTunnelProvider.swift */,
+				B10020 /* TransparentProxyProvider.swift */,
 			);
-			path = PacketTunnel;
+			path = TransparentProxy;
 			sourceTree = "<group>";
 		};
 		G10004 /* Shared */ = {
@@ -241,7 +241,7 @@
 		G10007 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				259DB0A8D1BC3A31D635256A /* PacketTunnel.systemextension */,
+				259DB0A8D1BC3A31D635256A /* TransparentProxy.systemextension */,
 				8A37D4B4A6176DB152B15D42 /* BaoLianDeng.app */,
 				T10010 /* BaoLianDengTests.xctest */,
 			);
@@ -286,9 +286,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		037A5AF56A256698DCED8763 /* PacketTunnel */ = {
+		037A5AF56A256698DCED8763 /* TransparentProxy */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 727002C1957CE115B06B49FF /* Build configuration list for PBXNativeTarget "PacketTunnel" */;
+			buildConfigurationList = 727002C1957CE115B06B49FF /* Build configuration list for PBXNativeTarget "TransparentProxy" */;
 			buildPhases = (
 				AC6927007E0505BD42D960D3 /* Sources */,
 				9DE882A8FCF34B2CAEEB6D1E /* Frameworks */,
@@ -298,12 +298,12 @@
 			);
 			dependencies = (
 			);
-			name = PacketTunnel;
+			name = TransparentProxy;
 			packageProductDependencies = (
 				BDB2BE65B199185132229163 /* Yams */,
 			);
-			productName = PacketTunnel;
-			productReference = 259DB0A8D1BC3A31D635256A /* PacketTunnel.systemextension */;
+			productName = TransparentProxy;
+			productReference = 259DB0A8D1BC3A31D635256A /* TransparentProxy.systemextension */;
 			productType = "com.apple.product-type.system-extension";
 		};
 		F66874266FF58B2DD8903C6E /* BaoLianDeng */ = {
@@ -373,7 +373,7 @@
 			projectRoot = "";
 			targets = (
 				F66874266FF58B2DD8903C6E /* BaoLianDeng */,
-				037A5AF56A256698DCED8763 /* PacketTunnel */,
+				037A5AF56A256698DCED8763 /* TransparentProxy */,
 				T10001 /* BaoLianDengTests */,
 			);
 		};
@@ -430,7 +430,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9EAAFF911784E9AE012953A3 /* PacketTunnelProvider.swift in Sources */,
+				9EAAFF911784E9AE012953A3 /* TransparentProxyProvider.swift in Sources */,
 				F0MAIN0001 /* main.swift in Sources */,
 				EBAC80D31A3CCD3F3C083FDA /* AppLogger.swift in Sources */,
 				9C1CFB15DEC224B8210EA2E9 /* Constants.swift in Sources */,
@@ -453,8 +453,8 @@
 /* Begin PBXTargetDependency section */
 		DA703E0CEAA502F686AA37BF /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			name = PacketTunnel;
-			target = 037A5AF56A256698DCED8763 /* PacketTunnel */;
+			name = TransparentProxy;
+			target = 037A5AF56A256698DCED8763 /* TransparentProxy */;
 			targetProxy = 1536C2A90777E05354ED602F /* PBXContainerItemProxy */;
 		};
 		T10012 /* PBXTargetDependency */ = {
@@ -470,11 +470,11 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B10070 /* Local.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = PacketTunnelMac/PacketTunnelMac.entitlements;
+				CODE_SIGN_ENTITLEMENTS = TransparentProxyMac/TransparentProxyMac.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Manual;
-				PROVISIONING_PROFILE_SPECIFIER = "BaoLianDeng PacketTunnel Developer ID";
+				PROVISIONING_PROFILE_SPECIFIER = "io.github.baoliandeng.macos.TransparentProxy";
 				CURRENT_PROJECT_VERSION = 11;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -482,7 +482,7 @@
 					"$(PROJECT_DIR)/Framework",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = PacketTunnelMac/Info.plist;
+				INFOPLIST_FILE = TransparentProxyMac/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -493,8 +493,8 @@
 					"-lresolv",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng.macos.PacketTunnel;
-				PRODUCT_NAME = io.github.baoliandeng.macos.PacketTunnel;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng.macos.TransparentProxy;
+				PRODUCT_NAME = io.github.baoliandeng.macos.TransparentProxy;
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -544,11 +544,11 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B10070 /* Local.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = PacketTunnelMac/PacketTunnelMac.entitlements;
+				CODE_SIGN_ENTITLEMENTS = TransparentProxyMac/TransparentProxyMac.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Manual;
-				PROVISIONING_PROFILE_SPECIFIER = "BaoLianDeng PacketTunnel Developer ID";
+				PROVISIONING_PROFILE_SPECIFIER = "io.github.baoliandeng.macos.TransparentProxy";
 				CURRENT_PROJECT_VERSION = 11;
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -556,7 +556,7 @@
 					"$(PROJECT_DIR)/Framework",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = PacketTunnelMac/Info.plist;
+				INFOPLIST_FILE = TransparentProxyMac/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -567,8 +567,8 @@
 					"-lresolv",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng.macos.PacketTunnel;
-				PRODUCT_NAME = io.github.baoliandeng.macos.PacketTunnel;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.baoliandeng.macos.TransparentProxy;
+				PRODUCT_NAME = io.github.baoliandeng.macos.TransparentProxy;
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -715,7 +715,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		727002C1957CE115B06B49FF /* Build configuration list for PBXNativeTarget "PacketTunnel" */ = {
+		727002C1957CE115B06B49FF /* Build configuration list for PBXNativeTarget "TransparentProxy" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				06AC95C84A776847DF0FBFDB /* Release */,

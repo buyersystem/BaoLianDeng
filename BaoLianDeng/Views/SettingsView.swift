@@ -41,6 +41,14 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("System Extension") {
+                    Button("Uninstall System Extension") {
+                        vpnManager.stop()
+                        vpnManager.deactivateSystemExtension()
+                    }
+                    .foregroundStyle(.red)
+                }
+
                 Section("About") {
                     NavigationLink("About BaoLianDeng") {
                         AboutView()

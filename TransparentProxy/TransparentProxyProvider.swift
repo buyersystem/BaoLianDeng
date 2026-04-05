@@ -49,7 +49,7 @@ final class DNSTable {
 
 // MARK: - Transparent Proxy Provider
 
-class PacketTunnelProvider: NETransparentProxyProvider {
+class TransparentProxyProvider: NETransparentProxyProvider {
     private var proxyStarted = false
     private var gcTimer: DispatchSourceTimer?
     private var diagnosticTimer: DispatchSourceTimer?
@@ -184,9 +184,13 @@ class PacketTunnelProvider: NETransparentProxyProvider {
 
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
         // Per-app filtering: return false to let bypassed flows connect directly
-        if let settings = perAppSettings {
+        if let settings = perAppSettings, settings.enabled {
             let appID = flow.metaData.sourceAppSigningIdentifier
-            if !settings.shouldProxy(bundleID: appID, knownBundleIDs: perAppBundleIDSet) {
+            let shouldProxy = settings.shouldProxy(
+                bundleID: appID, knownBundleIDs: perAppBundleIDSet
+            )
+            if !shouldProxy {
+                log("BYPASS flow from \(appID)")
                 return false
             }
         }

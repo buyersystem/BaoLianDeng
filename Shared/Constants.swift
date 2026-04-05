@@ -17,7 +17,7 @@ import Foundation
 
 enum AppConstants {
     static let appGroupIdentifier: String? = nil
-    static let tunnelBundleIdentifier = "io.github.baoliandeng.macos.PacketTunnel"
+    static let tunnelBundleIdentifier = "io.github.baoliandeng.macos.TransparentProxy"
     static let configFileName = "config.yaml"
     static let externalControllerAddr = "127.0.0.1:9090"
     static let dailyTrafficKey = "dailyTrafficRecords"

@@ -5,7 +5,7 @@ set -e
 VPN_NAME="BaoLianDeng"
 APP_PATH="/Applications/BaoLianDeng.app"
 PROJECT_DIR="/Volumes/DATA/workspace/BaoLianDeng"
-LOG_DIR="$HOME/Library/Containers/io.github.baoliandeng.macos.PacketTunnel/Data/Library/Application Support/BaoLianDeng"
+LOG_DIR="$HOME/Library/Containers/io.github.baoliandeng.macos.TransparentProxy/Data/Library/Application Support/BaoLianDeng"
 
 cd "$PROJECT_DIR"
 

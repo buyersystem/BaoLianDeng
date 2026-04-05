@@ -12,7 +12,7 @@ CONCURRENCY="${4:-50}"
 VPN_NAME="BaoLianDeng"
 APP_PATH="/Applications/BaoLianDeng.app"
 CONFIG_DIR="$HOME/Library/Application Support/BaoLianDeng/mihomo"
-LOG_DIR="$HOME/Library/Containers/io.github.baoliandeng.macos.PacketTunnel/Data/Library/Application Support/BaoLianDeng"
+LOG_DIR="$HOME/Library/Containers/io.github.baoliandeng.macos.TransparentProxy/Data/Library/Application Support/BaoLianDeng"
 BUNDLE_ID="io.github.baoliandeng.macos"
 
 CERT_PATH="/tmp/stress-test-cert.pem"

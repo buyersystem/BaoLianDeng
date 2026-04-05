@@ -29,8 +29,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "037A5AF56A256698DCED8763"
-               BuildableName = "PacketTunnel.systemextension"
-               BlueprintName = "PacketTunnel"
+               BuildableName = "TransparentProxy.systemextension"
+               BlueprintName = "TransparentProxy"
                ReferencedContainer = "container:BaoLianDeng.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>

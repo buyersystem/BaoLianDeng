@@ -35,7 +35,7 @@ final class VPNManager: NSObject, ObservableObject {
         #endif
     }
 
-    private var manager: NETunnelProviderManager?
+    private var manager: NETransparentProxyManager?
     private var statusObserver: NSObjectProtocol?
 
     private override init() {
@@ -58,6 +58,15 @@ final class VPNManager: NSObject, ObservableObject {
         request.delegate = self
         OSSystemExtensionManager.shared.submitRequest(request)
     }
+
+    func deactivateSystemExtension() {
+        let request = OSSystemExtensionRequest.deactivationRequest(
+            forExtensionWithIdentifier: AppConstants.tunnelBundleIdentifier,
+            queue: .main
+        )
+        request.delegate = self
+        OSSystemExtensionManager.shared.submitRequest(request)
+    }
     #endif
 
     deinit {
@@ -70,29 +79,35 @@ final class VPNManager: NSObject, ObservableObject {
         status == .connected
     }
 
-    /// Check if the network extension is enabled by verifying a VPN config can be loaded.
+    /// Check if the system extension is enabled by re-probing activation status.
     func checkExtensionStatus() {
-        NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, _ in
+        #if canImport(SystemExtensions)
+        // Re-submit activation request — the delegate callbacks will update extensionEnabled
+        // based on the actual system extension state (not the VPN config flag).
+        activateSystemExtension()
+        #else
+        NETransparentProxyManager.loadAllFromPreferences { [weak self] managers, _ in
             DispatchQueue.main.async {
                 let enabled = managers?.first?.isEnabled ?? false
                 self?.extensionEnabled = enabled
                 self?.dbg("checkExtensionStatus: enabled=\(enabled)")
             }
         }
+        #endif
     }
 
     // MARK: - Manager Lifecycle
 
     func loadManager() {
         dbg("loadManager called")
-        NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, error in
+        NETransparentProxyManager.loadAllFromPreferences { [weak self] managers, error in
             guard let self = self else { return }
             if let error = error {
                 self.dbg("loadManager load error: \(error.localizedDescription)")
             }
             // Reuse existing manager if one exists, otherwise create new
-            let mgr: NETunnelProviderManager
-            if let existing = managers?.first {
+            let mgr: NETransparentProxyManager
+            if let existing = managers?.first as? NETransparentProxyManager {
                 self.dbg("loadManager: reusing existing config")
                 mgr = existing
             } else {
@@ -118,8 +133,8 @@ final class VPNManager: NSObject, ObservableObject {
         }
     }
 
-    private func createManager() -> NETunnelProviderManager {
-        let manager = NETunnelProviderManager()
+    private func createManager() -> NETransparentProxyManager {
+        let manager = NETransparentProxyManager()
         let proto = NETunnelProviderProtocol()
         proto.providerBundleIdentifier = AppConstants.tunnelBundleIdentifier
         proto.serverAddress = "BaoLianDeng"
@@ -505,12 +520,15 @@ extension VPNManager: OSSystemExtensionRequestDelegate {
         // requestSuperseded (code 4) means extension is already active
         if nsError.domain == "OSSystemExtensionErrorDomain" && nsError.code == 4 {
             DispatchQueue.main.async { self.extensionEnabled = true }
+            loadManager()
+        } else {
+            DispatchQueue.main.async { self.extensionEnabled = false }
         }
-        loadManager()
     }
 
     func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
         dbg("needsUserApproval")
+        DispatchQueue.main.async { self.extensionEnabled = false }
         // Open System Settings so the user can allow the extension
         #if canImport(AppKit)
         if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {

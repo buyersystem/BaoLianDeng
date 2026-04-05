@@ -63,8 +63,8 @@ cat > "$EXPORT_PLIST" <<PLIST
     <dict>
         <key>io.github.baoliandeng.macos</key>
         <string>BaoLianDeng macOS Developer ID</string>
-        <key>io.github.baoliandeng.macos.PacketTunnel</key>
-        <string>BaoLianDeng PacketTunnel Developer ID</string>
+        <key>io.github.baoliandeng.macos.TransparentProxy</key>
+        <string>io.github.baoliandeng.macos.TransparentProxy</string>
     </dict>
 </dict>
 </plist>
