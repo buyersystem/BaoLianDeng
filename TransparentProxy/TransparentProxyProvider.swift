@@ -713,6 +713,12 @@ class TransparentProxyProvider: NETransparentProxyProvider {
             ) {
                 logContent += "\n--- Rust Bridge Log ---\n" + rustLog
             }
+            // Keep only the last portion if the combined log is too large
+            let maxResponseBytes = 256 * 1024
+            if logContent.utf8.count > maxResponseBytes,
+               let tail = String(logContent.utf8.suffix(maxResponseBytes)) {
+                logContent = "… (truncated)\n" + tail
+            }
             completionHandler?(logContent.data(using: .utf8))
 
         default:
@@ -880,16 +886,27 @@ class TransparentProxyProvider: NETransparentProxyProvider {
         logTrimTimer = timer
     }
 
+    private static let maxLogLines = 2000
+
     private func trimLogFile() {
+        trimLog(at: logURL)
+        let rustLogURL = logURL.deletingLastPathComponent()
+            .appendingPathComponent("rust_bridge.log")
+        trimLog(at: rustLogURL)
+    }
+
+    private func trimLog(at url: URL) {
         guard let content = try? String(
-            contentsOf: logURL, encoding: .utf8
+            contentsOf: url, encoding: .utf8
         ) else { return }
         let cutoff = Date().addingTimeInterval(-3600)
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss Z"
-        let lines = content.components(separatedBy: "\n")
-        let kept = lines.filter { line in
-            // Lines look like: [2026-04-04 12:34:56 +0000] message
+        var lines = content.components(separatedBy: "\n")
+
+        // Drop lines older than 1 hour
+        if let firstKeptIndex = lines.firstIndex(where: { line in
             guard line.hasPrefix("["),
                   let end = line.firstIndex(of: "]")
             else { return false }
@@ -897,12 +914,22 @@ class TransparentProxyProvider: NETransparentProxyProvider {
                 line[line.index(after: line.startIndex)..<end]
             )
             guard let date = formatter.date(from: dateStr) else {
-                return true
+                return false
             }
             return date >= cutoff
+        }) {
+            lines = Array(lines[firstKeptIndex...])
         }
-        let trimmed = kept.joined(separator: "\n") + "\n"
-        try? trimmed.write(to: logURL, atomically: true, encoding: .utf8)
+
+        // Cap at max line count, keeping the tail
+        if lines.count > Self.maxLogLines {
+            lines = Array(lines.suffix(Self.maxLogLines))
+        }
+
+        let trimmed = lines.joined(separator: "\n")
+        if trimmed.count < content.count {
+            try? trimmed.write(to: url, atomically: true, encoding: .utf8)
+        }
     }
 
     private func preResolveProxyServers(configPath: String) -> Set<String> {
