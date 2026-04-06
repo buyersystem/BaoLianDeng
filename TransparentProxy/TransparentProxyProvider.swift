@@ -222,15 +222,17 @@ class TransparentProxyProvider: NETransparentProxyProvider {
         let hostname = dnsTable.lookup(destHost) ?? destHost
 
         Task {
+            var socksConn: NWConnection?
             do {
                 // Connect to Mihomo's SOCKS5 proxy
-                let socksConn = try await connectTCP(
+                let conn = try await connectTCP(
                     host: Self.socksHost, port: Self.socksPort
                 )
+                socksConn = conn
 
                 // SOCKS5 handshake
                 try await socks5Handshake(
-                    connection: socksConn,
+                    connection: conn,
                     destHost: hostname,
                     destPort: UInt16(destPort) ?? 0
                 )
@@ -247,9 +249,10 @@ class TransparentProxyProvider: NETransparentProxyProvider {
                 }
 
                 // Relay bidirectionally: flow ↔ SOCKS5 connection
-                await relayTCP(flow: flow, connection: socksConn)
+                await relayTCP(flow: flow, connection: conn)
 
             } catch {
+                socksConn?.cancel()
                 flow.closeReadWithError(error)
                 flow.closeWriteWithError(error)
             }
@@ -274,6 +277,10 @@ class TransparentProxyProvider: NETransparentProxyProvider {
 
                 // Read datagrams and handle DNS
                 await handleUDPDatagrams(flow: flow)
+
+                // Normal exit — close the flow
+                flow.closeReadWithError(nil)
+                flow.closeWriteWithError(nil)
 
             } catch {
                 flow.closeReadWithError(error)
@@ -384,7 +391,7 @@ class TransparentProxyProvider: NETransparentProxyProvider {
 
     /// Resolve a DNS query via DNS-over-HTTPS through the SOCKS5 proxy.
     private func resolveDNSviaDoH(query: Data) async throws -> Data {
-        var request = URLRequest(url: URL(string: "https://cloudflare-dns.com/dns-query")!)
+        var request = URLRequest(url: URL(string: Self.dohURL)!)
         request.httpMethod = "POST"
         request.setValue("application/dns-message", forHTTPHeaderField: "Content-Type")
         request.setValue("application/dns-message", forHTTPHeaderField: "Accept")
@@ -593,43 +600,6 @@ class TransparentProxyProvider: NETransparentProxyProvider {
         }
     }
 
-    private func readHTTPResponse(connection: NWConnection) async throws -> Data {
-        var buffer = Data()
-        // Read until we find \r\n\r\n (end of headers)
-        while true {
-            let chunk = try await readSome(connection: connection)
-            if chunk.isEmpty { break }
-            buffer.append(chunk)
-            if let headerEnd = buffer.range(
-                of: Data("\r\n\r\n".utf8)
-            ) {
-                // Find Content-Length
-                let headerStr = String(
-                    data: buffer[..<headerEnd.lowerBound], encoding: .utf8
-                ) ?? ""
-                let bodyStart = headerEnd.upperBound
-                var contentLength = 0
-                for line in headerStr.split(separator: "\r\n")
-                    where line.lowercased().hasPrefix("content-length:") {
-                    let val = line.dropFirst("content-length:".count)
-                        .trimmingCharacters(in: .whitespaces)
-                    contentLength = Int(val) ?? 0
-                }
-
-                // Read remaining body if needed
-                let bodyReceived = buffer.count - bodyStart
-                while buffer.count - bodyStart < contentLength {
-                    let more = try await readSome(connection: connection)
-                    if more.isEmpty { break }
-                    buffer.append(more)
-                }
-
-                return Data(buffer[bodyStart...])
-            }
-        }
-        throw ProviderError.unexpectedEOF
-    }
-
     // MARK: - DNS Parsing (reference: trans_proxy dns.rs)
 
     /// Extract the queried domain name from a DNS query packet.
@@ -757,7 +727,9 @@ class TransparentProxyProvider: NETransparentProxyProvider {
             tunnelRemoteAddress: "127.0.0.1"
         )
 
-        // Include all TCP and UDP traffic
+        // Include all TCP and UDP outbound traffic.
+        // Note: port 53 cannot be specified directly for transparent proxy rules
+        // on macOS 15+. Instead we match all UDP and filter DNS in handleNewFlow().
         let tcpRule = NENetworkRule(
             remoteNetwork: nil,
             remotePrefix: 0,

@@ -29,6 +29,8 @@ final class VPNManager: NSObject, ObservableObject {
     @Published var isProcessing = false
     @Published var errorMessage: String?
     @Published var extensionEnabled = false
+    private var pendingActivation = false
+    private var isLoadingManager = false
     private func dbg(_ msg: String) {
         #if DEBUG
         AppLogger.vpn.debug("\(msg, privacy: .public)")
@@ -51,6 +53,8 @@ final class VPNManager: NSObject, ObservableObject {
 
     #if canImport(SystemExtensions)
     func activateSystemExtension() {
+        dbg("activateSystemExtension called")
+        pendingActivation = true
         let request = OSSystemExtensionRequest.activationRequest(
             forExtensionWithIdentifier: AppConstants.tunnelBundleIdentifier,
             queue: .main
@@ -82,9 +86,25 @@ final class VPNManager: NSObject, ObservableObject {
     /// Check if the system extension is enabled by re-probing activation status.
     func checkExtensionStatus() {
         #if canImport(SystemExtensions)
-        // Re-submit activation request — the delegate callbacks will update extensionEnabled
-        // based on the actual system extension state (not the VPN config flag).
-        activateSystemExtension()
+        if pendingActivation {
+            // Don't re-submit while waiting for user approval — it would cancel the pending request.
+            // Instead, check if the extension was approved by trying to load the VPN config.
+            NETransparentProxyManager.loadAllFromPreferences { [weak self] managers, _ in
+                guard let self = self else { return }
+                if managers?.first != nil {
+                    DispatchQueue.main.async {
+                        self.extensionEnabled = true
+                        self.pendingActivation = false
+                    }
+                    self.loadManager()
+                } else {
+                    // Extension not yet approved — try activating again in case the old request was lost
+                    self.activateSystemExtension()
+                }
+            }
+        } else {
+            activateSystemExtension()
+        }
         #else
         NETransparentProxyManager.loadAllFromPreferences { [weak self] managers, _ in
             DispatchQueue.main.async {
@@ -99,17 +119,25 @@ final class VPNManager: NSObject, ObservableObject {
     // MARK: - Manager Lifecycle
 
     func loadManager() {
+        guard !isLoadingManager else { return }
+        isLoadingManager = true
         dbg("loadManager called")
         NETransparentProxyManager.loadAllFromPreferences { [weak self] managers, error in
             guard let self = self else { return }
             if let error = error {
                 self.dbg("loadManager load error: \(error.localizedDescription)")
             }
+            let allManagers = (managers ?? []).compactMap { $0 as? NETransparentProxyManager }
             // Reuse existing manager if one exists, otherwise create new
             let mgr: NETransparentProxyManager
-            if let existing = managers?.first as? NETransparentProxyManager {
+            if let existing = allManagers.first {
                 self.dbg("loadManager: reusing existing config")
                 mgr = existing
+                // Remove duplicate configs
+                for duplicate in allManagers.dropFirst() {
+                    self.dbg("loadManager: removing duplicate config")
+                    duplicate.removeFromPreferences(completionHandler: nil)
+                }
             } else {
                 self.dbg("loadManager: creating new config")
                 mgr = self.createManager()
@@ -121,6 +149,7 @@ final class VPNManager: NSObject, ObservableObject {
                 }
                 mgr.loadFromPreferences { error in
                     DispatchQueue.main.async {
+                        self.isLoadingManager = false
                         if let error = error {
                             self.dbg("loadManager reload error: \(error.localizedDescription)")
                         }
@@ -503,12 +532,15 @@ final class VPNManager: NSObject, ObservableObject {
 extension VPNManager: OSSystemExtensionRequestDelegate {
     func request(_ request: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
         dbg("didFinish: result=\(result.rawValue)")
+        pendingActivation = false
         switch result {
         case .completed:
-            extensionEnabled = true
+            DispatchQueue.main.async { self.extensionEnabled = true }
             loadManager()
         case .willCompleteAfterReboot:
-            errorMessage = "System extension will activate after reboot"
+            DispatchQueue.main.async {
+                self.errorMessage = "System extension will activate after reboot"
+            }
         @unknown default:
             loadManager()
         }
@@ -517,19 +549,23 @@ extension VPNManager: OSSystemExtensionRequestDelegate {
     func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
         let nsError = error as NSError
         dbg("didFail: \(error.localizedDescription) domain=\(nsError.domain) code=\(nsError.code)")
+        pendingActivation = false
         // requestSuperseded (code 4) means extension is already active
         if nsError.domain == "OSSystemExtensionErrorDomain" && nsError.code == 4 {
             DispatchQueue.main.async { self.extensionEnabled = true }
             loadManager()
         } else {
-            DispatchQueue.main.async { self.extensionEnabled = false }
+            DispatchQueue.main.async {
+                self.extensionEnabled = false
+                self.errorMessage = "System extension error: \(error.localizedDescription)"
+            }
         }
     }
 
     func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
         dbg("needsUserApproval")
+        // Keep pendingActivation = true so checkExtensionStatus doesn't re-submit
         DispatchQueue.main.async { self.extensionEnabled = false }
-        // Open System Settings so the user can allow the extension
         #if canImport(AppKit)
         if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
             NSWorkspace.shared.open(url)
