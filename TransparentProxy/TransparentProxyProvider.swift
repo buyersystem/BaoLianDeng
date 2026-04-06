@@ -251,6 +251,11 @@ class TransparentProxyProvider: NETransparentProxyProvider {
                 // Relay bidirectionally: flow ↔ SOCKS5 connection
                 await relayTCP(flow: flow, connection: conn)
 
+                // Ensure cleanup after normal relay completion
+                conn.cancel()
+                flow.closeReadWithError(nil)
+                flow.closeWriteWithError(nil)
+
             } catch {
                 socksConn?.cancel()
                 flow.closeReadWithError(error)
@@ -496,7 +501,10 @@ class TransparentProxyProvider: NETransparentProxyProvider {
                         break
                     }
                 }
+                // Signal both sides so the other task can exit
                 connection.cancel()
+                flow.closeReadWithError(nil)
+                flow.closeWriteWithError(nil)
             }
 
             // SOCKS5 → Flow
@@ -515,6 +523,8 @@ class TransparentProxyProvider: NETransparentProxyProvider {
                         break
                     }
                 }
+                // Signal both sides so the other task can exit
+                connection.cancel()
                 flow.closeReadWithError(nil)
                 flow.closeWriteWithError(nil)
             }
