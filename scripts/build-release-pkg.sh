@@ -109,10 +109,14 @@ pkgbuild --analyze --root "$EXPORT_PATH" "$COMPONENT_PLIST"
 /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$COMPONENT_PLIST"
 
 # Build component package (unsigned intermediate)
+# --scripts points to scripts/ which contains a preinstall script
+# that removes any existing installation before the new one is laid down.
+SCRIPTS_DIR="${PROJECT_DIR}/scripts"
 pkgbuild \
   --root "$EXPORT_PATH" \
   --component-plist "$COMPONENT_PLIST" \
   --install-location /Applications \
+  --scripts "$SCRIPTS_DIR" \
   --identifier "io.github.baoliandeng.macos.pkg" \
   --version "$VERSION" \
   "$COMPONENT_PKG"

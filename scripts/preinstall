@@ -1,0 +1,28 @@
+#!/bin/bash
+# PKG preinstall script: remove existing BaoLianDeng before installing the new version.
+# macOS automatically upgrades the system extension when the new app bundle
+# (same team ID + bundle ID) replaces the old one, so we just need to stop
+# the VPN and remove the old app.
+
+APP="/Applications/BaoLianDeng.app"
+
+if [ ! -d "$APP" ]; then
+    echo "No existing installation found, skipping uninstall."
+    exit 0
+fi
+
+echo "Existing installation found, uninstalling..."
+
+# Stop the VPN if running
+scutil --nc stop "BaoLianDeng" 2>/dev/null || true
+sleep 1
+
+# Kill the app if running
+killall BaoLianDeng 2>/dev/null || true
+sleep 1
+
+# Remove the old app bundle
+rm -rf "$APP"
+
+echo "Existing installation removed."
+exit 0
