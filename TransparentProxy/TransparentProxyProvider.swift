@@ -280,8 +280,14 @@ class TransparentProxyProvider: NETransparentProxyProvider {
                     }
                 }
 
-                // Read datagrams and handle DNS
-                await handleUDPDatagrams(flow: flow)
+                // Create relay lazily — initialized on first non-DNS datagram
+                var relay: UDPNATRelay?
+
+                // Read datagrams and handle DNS + non-DNS UDP
+                await handleUDPDatagrams(flow: flow, relay: &relay)
+
+                // Clean up relay
+                relay?.cancel()
 
                 // Normal exit — close the flow
                 flow.closeReadWithError(nil)
@@ -294,7 +300,9 @@ class TransparentProxyProvider: NETransparentProxyProvider {
         }
     }
 
-    private func handleUDPDatagrams(flow: NEAppProxyUDPFlow) async {
+    private func handleUDPDatagrams(
+        flow: NEAppProxyUDPFlow, relay: inout UDPNATRelay?
+    ) async {
         while true {
             var datagrams: [Data] = []
             var endpoints: [NWHostEndpoint] = []
@@ -330,6 +338,27 @@ class TransparentProxyProvider: NETransparentProxyProvider {
                 if port == 53 {
                     await handleDNSQuery(
                         query: datagram, flow: flow, endpoint: endpoint
+                    )
+                } else {
+                    // Non-DNS UDP: relay directly (bypass mihomo)
+                    guard !isBroadcastOrMulticast(endpoint.hostname) else {
+                        continue
+                    }
+
+                    // Lazily create relay on first non-DNS datagram
+                    if relay == nil {
+                        relay = UDPNATRelay(flow: flow)
+                        if let relay = relay {
+                            relay.startReceiving()
+                            log("UDP NAT relay created for non-DNS traffic")
+                        } else {
+                            log("ERROR: Failed to create UDP NAT relay")
+                        }
+                    }
+                    relay?.send(
+                        datagram: datagram,
+                        toHost: endpoint.hostname,
+                        port: port
                     )
                 }
             }
@@ -1041,6 +1070,7 @@ enum ProviderError: LocalizedError {
     case socks5ConnectFailed
     case connectionCancelled
     case unexpectedEOF
+    case udpRelayFailed
 
     var errorDescription: String? {
         switch self {
@@ -1054,6 +1084,8 @@ enum ProviderError: LocalizedError {
             return "Connection was cancelled"
         case .unexpectedEOF:
             return "Unexpected end of data"
+        case .udpRelayFailed:
+            return "UDP relay socket creation failed"
         }
     }
 }
