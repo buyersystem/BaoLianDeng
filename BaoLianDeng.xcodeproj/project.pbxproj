@@ -26,6 +26,7 @@
 		9161E23D345558ED5649452F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10010 /* Assets.xcassets */; };
 		9C1CFB15DEC224B8210EA2E9 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* Constants.swift */; };
 		9EAAFF911784E9AE012953A3 /* TransparentProxyProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020 /* TransparentProxyProvider.swift */; };
+		A2B3C4D5E6F7A8B9C0D1E2F3 /* UDPNATRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10021 /* UDPNATRelay.swift */; };
 		A11E11AF2CAB6611B7442CD4 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4E02415D2E45FB235C0EF142 /* Cocoa.framework */; };
 		A9840B29BC5EC55F29F0BA38 /* TrafficStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060 /* TrafficStore.swift */; };
 		AC0B915E8C1239813ABF4AB7 /* TunnelLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10035 /* TunnelLogView.swift */; };
@@ -105,6 +106,7 @@
 		B10011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10012 /* BaoLianDeng.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BaoLianDeng.entitlements; sourceTree = "<group>"; };
 		B10020 /* TransparentProxyProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransparentProxyProvider.swift; sourceTree = "<group>"; };
+		B10021 /* UDPNATRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UDPNATRelay.swift; sourceTree = "<group>"; };
 		B10030 /* MihomoCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = MihomoCore.xcframework; sourceTree = "<group>"; };
 		B10035 /* TunnelLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelLogView.swift; sourceTree = "<group>"; };
 		B10040 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
@@ -214,6 +216,7 @@
 			isa = PBXGroup;
 			children = (
 				B10020 /* TransparentProxyProvider.swift */,
+				B10021 /* UDPNATRelay.swift */,
 			);
 			path = TransparentProxy;
 			sourceTree = "<group>";
@@ -451,6 +454,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9EAAFF911784E9AE012953A3 /* TransparentProxyProvider.swift in Sources */,
+				A2B3C4D5E6F7A8B9C0D1E2F3 /* UDPNATRelay.swift in Sources */,
 				F0MAIN0001 /* main.swift in Sources */,
 				EBAC80D31A3CCD3F3C083FDA /* AppLogger.swift in Sources */,
 				9C1CFB15DEC224B8210EA2E9 /* Constants.swift in Sources */,
