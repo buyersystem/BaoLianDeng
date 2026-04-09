@@ -25,22 +25,23 @@ cd "$PROJECT_DIR"
 : "${ASC_KEY_ID:?Set ASC_KEY_ID to your App Store Connect key ID}"
 : "${ASC_ISSUER_ID:?Set ASC_ISSUER_ID to your App Store Connect issuer ID}"
 
-VERSION=$(xcodebuild -project ${APP_NAME}.xcodeproj -scheme "$SCHEME" -showBuildSettings 2>/dev/null \
-  | awk '/MARKETING_VERSION/ { print $3; exit }')
-BUILD=$(xcodebuild -project ${APP_NAME}.xcodeproj -scheme "$SCHEME" -showBuildSettings 2>/dev/null \
-  | awk '/CURRENT_PROJECT_VERSION/ { print $3; exit }')
-PKG_PATH="/tmp/${APP_NAME}-${VERSION}.pkg"
-
 TEAM_ID=$(grep DEVELOPMENT_TEAM Local.xcconfig | head -1 | awk -F= '{gsub(/[ \t]/, "", $2); print $2}')
 INSTALLER_CERT=$(security find-identity -v -p basic | grep "Developer ID Installer" | head -1 | awk -F'"' '{print $2}')
 
-echo "=== Building ${APP_NAME} v${VERSION} (${BUILD}) PKG ==="
+echo "=== Step 0: Bump Release build number ==="
+# Touches only the Release XCBuildConfiguration blocks. Debug is left alone so
+# dev iterations don't perturb the App Store version stream.
+"$PROJECT_DIR/scripts/bump-build.sh" release
 
-echo "=== Step 0: Bump build number for system extension ==="
-NEW_BUILD=$((BUILD + 1))
-xcrun agvtool new-version -all "$NEW_BUILD" > /dev/null
-BUILD=$NEW_BUILD
-echo "Build number bumped to ${BUILD}"
+# Read Release-only build settings AFTER the bump so the banner and PKG_PATH
+# reflect the version being shipped.
+VERSION=$(xcodebuild -project ${APP_NAME}.xcodeproj -scheme "$SCHEME" -configuration Release -showBuildSettings 2>/dev/null \
+  | awk '/MARKETING_VERSION/ { print $3; exit }')
+BUILD=$(xcodebuild -project ${APP_NAME}.xcodeproj -scheme "$SCHEME" -configuration Release -showBuildSettings 2>/dev/null \
+  | awk '/CURRENT_PROJECT_VERSION/ { print $3; exit }')
+PKG_PATH="/tmp/${APP_NAME}-${VERSION}.pkg"
+
+echo "=== Building ${APP_NAME} v${VERSION} (${BUILD}) PKG ==="
 
 echo "=== Step 1: Build framework ==="
 make framework

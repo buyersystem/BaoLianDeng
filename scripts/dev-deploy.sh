@@ -17,10 +17,16 @@ echo "=== Step 2: Quit app ==="
 osascript -e 'tell application "BaoLianDeng" to quit' 2>/dev/null || true
 sleep 1
 
-echo "=== Step 3: Build framework ==="
+echo "=== Step 3: Bump Debug build number ==="
+# Forces sysextd to treat this as a new version and properly reload the
+# extension. Without a version bump, system-extension replacement is fragile —
+# the existing registration may stay pinned to the previous binary hash.
+"$PROJECT_DIR/scripts/bump-build.sh" debug
+
+echo "=== Step 4: Build framework ==="
 make framework
 
-echo "=== Step 4: Build app ==="
+echo "=== Step 5: Build app ==="
 rm -rf ~/Library/Developer/Xcode/DerivedData/BaoLianDeng-*
 xcodebuild build \
   -project BaoLianDeng.xcodeproj \
@@ -28,15 +34,15 @@ xcodebuild build \
   -configuration Debug \
   -destination 'platform=macOS' 2>&1 | tail -3
 
-echo "=== Step 5: Install ==="
+echo "=== Step 6: Install ==="
 rm -rf "$APP_PATH"
 cp -R ~/Library/Developer/Xcode/DerivedData/BaoLianDeng-*/Build/Products/Debug/BaoLianDeng.app "$APP_PATH"
 
-echo "=== Step 6: Launch app ==="
+echo "=== Step 7: Launch app ==="
 open "$APP_PATH"
 sleep 2
 
-echo "=== Step 7: Start VPN ==="
+echo "=== Step 8: Start VPN ==="
 scutil --nc start "$VPN_NAME"
 # Wait for VPN to connect (up to 15s)
 for i in $(seq 1 15); do
@@ -48,7 +54,7 @@ for i in $(seq 1 15); do
     sleep 1
 done
 
-echo "=== Step 8: Wait for tunnel + mihomo startup ==="
+echo "=== Step 9: Wait for tunnel + mihomo startup ==="
 LOG_FILE="$LOG_DIR/rust_bridge.log"
 for i in $(seq 1 30); do
     if grep -q "engine started successfully" "$LOG_FILE" 2>/dev/null && \
@@ -62,17 +68,17 @@ for i in $(seq 1 30); do
 done
 
 # Verify mihomo SOCKS5 proxy is listening
-echo "=== Step 9: Verify SOCKS5 proxy ==="
+echo "=== Step 10: Verify SOCKS5 proxy ==="
 if curl -s --connect-timeout 3 --socks5 127.0.0.1:7890 http://www.baidu.com/ -o /dev/null -w "SOCKS5 proxy: HTTP %{http_code}\n"; then
     echo "SOCKS5 proxy OK"
 else
     echo "SOCKS5 proxy NOT ready"
 fi
 
-echo "=== Step 10: Test curl ==="
+echo "=== Step 11: Test curl ==="
 curl -s -o /dev/null -w "HTTP %{http_code} (%{time_total}s)\n" --max-time 30 http://ipinfo.io/ || echo "curl failed"
 
-echo "=== Step 11: Show logs ==="
+echo "=== Step 12: Show logs ==="
 echo "--- rust_bridge.log (STATS) ---"
 grep "STATS" "$LOG_DIR/rust_bridge.log" 2>/dev/null | tail -3
 echo "--- rust_bridge.log (TX DATA) ---"

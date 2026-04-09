@@ -22,14 +22,20 @@ cd "$PROJECT_DIR"
 : "${ASC_KEY_ID:?Set ASC_KEY_ID to your App Store Connect key ID}"
 : "${ASC_ISSUER_ID:?Set ASC_ISSUER_ID to your App Store Connect issuer ID}"
 
-VERSION=$(xcodebuild -project ${APP_NAME}.xcodeproj -scheme "$SCHEME" -showBuildSettings 2>/dev/null \
+TEAM_ID=$(grep DEVELOPMENT_TEAM Local.xcconfig | head -1 | awk -F= '{gsub(/[ \t]/, "", $2); print $2}')
+
+echo "=== Step 0: Bump Release build number ==="
+# Touches only the Release XCBuildConfiguration blocks. Debug is left alone so
+# dev iterations don't perturb the App Store version stream.
+"$PROJECT_DIR/scripts/bump-build.sh" release
+
+# Read Release-only build settings AFTER the bump.
+VERSION=$(xcodebuild -project ${APP_NAME}.xcodeproj -scheme "$SCHEME" -configuration Release -showBuildSettings 2>/dev/null \
   | awk '/MARKETING_VERSION/ { print $3; exit }')
-BUILD=$(xcodebuild -project ${APP_NAME}.xcodeproj -scheme "$SCHEME" -showBuildSettings 2>/dev/null \
+BUILD=$(xcodebuild -project ${APP_NAME}.xcodeproj -scheme "$SCHEME" -configuration Release -showBuildSettings 2>/dev/null \
   | awk '/CURRENT_PROJECT_VERSION/ { print $3; exit }')
 DMG_NAME="${APP_NAME}-${VERSION}"
 DMG_PATH="/tmp/${DMG_NAME}.dmg"
-
-TEAM_ID=$(grep DEVELOPMENT_TEAM Local.xcconfig | head -1 | awk -F= '{gsub(/[ \t]/, "", $2); print $2}')
 
 echo "=== Building ${APP_NAME} v${VERSION} (${BUILD}) ==="
 
