@@ -410,18 +410,43 @@ final class VPNManager: NSObject, ObservableObject {
                 }
                 return
             }
-            let selectorGroups = proxies.compactMap { name, value -> String? in
+            // Build a name → members map across every group-like type that
+            // exposes an `all` array. We need this to recursively resolve
+            // bypass groups whose first member is itself another group.
+            let groupTypes: Set<String> = ["Selector", "URLTest", "Fallback", "LoadBalance", "Relay"]
+            var groupMembers: [String: [String]] = [:]
+            for (name, value) in proxies {
+                guard let info = value as? [String: Any],
+                      let type = info["type"] as? String,
+                      groupTypes.contains(type),
+                      let all = info["all"] as? [String] else { continue }
+                groupMembers[name] = all
+            }
+            // For every non-bypass Selector group, decide what to push:
+            //   - if the group lists the user's selected node → push the node
+            //   - else if the group contains a Direct/REJECT member → push
+            //     that bypass member (matches applySelectedNode's config-time
+            //     rewrite: subscription authors list Direct in a group to
+            //     indicate it should bypass the proxy).
+            //   - else → leave alone
+            var targets: [(group: String, selection: String)] = []
+            for (name, value) in proxies {
                 guard let info = value as? [String: Any],
                       (info["type"] as? String) == "Selector",
                       let all = info["all"] as? [String],
-                      all.contains(nodeName) else { return nil }
-                return name
+                      let first = all.first,
+                      !isBypassGroup(firstMember: first, groupMembers: groupMembers) else { continue }
+                if all.contains(nodeName) {
+                    targets.append((name, nodeName))
+                } else if let bypass = firstBypassMember(in: all, groupMembers: groupMembers) {
+                    targets.append((name, bypass))
+                }
             }
-            self?.dbg("selectNode: \(nodeName) in groups \(selectorGroups)")
-            let body = try? JSONSerialization.data(withJSONObject: ["name": nodeName])
-            for groupName in selectorGroups {
+            self?.dbg("selectNode: \(nodeName) -> \(targets.map { "\($0.group)=\($0.selection)" })")
+            for (groupName, selection) in targets {
                 guard let encoded = groupName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-                      let putURL = URL(string: "http://\(AppConstants.externalControllerAddr)/api/proxy-groups/\(encoded)/select") else { continue }
+                      let putURL = URL(string: "http://\(AppConstants.externalControllerAddr)/api/proxy-groups/\(encoded)/select"),
+                      let body = try? JSONSerialization.data(withJSONObject: ["name": selection]) else { continue }
                 var request = URLRequest(url: putURL)
                 request.httpMethod = "PUT"
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")

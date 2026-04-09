@@ -42,6 +42,7 @@
 		EBAC80D31A3CCD3F3C083FDA /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090 /* AppLogger.swift */; };
 		A1B2C3D4E5F60718293A4B5C /* PerAppProxySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10095 /* PerAppProxySettings.swift */; };
 		A1B2C3D4E5F60718293A4B5D /* PerAppProxySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10095 /* PerAppProxySettings.swift */; };
+		T10022 /* BypassGroupDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10021 /* BypassGroupDetectionTests.swift */; };
 		A1B2C3D4E5F60718293A4B5E /* PerAppProxySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10096 /* PerAppProxySection.swift */; };
 		B10201 /* SubscriptionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10200 /* SubscriptionModels.swift */; };
 		B10203 /* NodeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10202 /* NodeRow.swift */; };
@@ -121,6 +122,7 @@
 		B10054 /* ConfigStyleHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigStyleHelpers.swift; sourceTree = "<group>"; };
 		B10055 /* ConfigListViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigListViews.swift; sourceTree = "<group>"; };
 		B10095 /* PerAppProxySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerAppProxySettings.swift; sourceTree = "<group>"; };
+		T10021 /* BypassGroupDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BypassGroupDetectionTests.swift; sourceTree = "<group>"; };
 		B10096 /* PerAppProxySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerAppProxySection.swift; sourceTree = "<group>"; };
 		B10200 /* SubscriptionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionModels.swift; sourceTree = "<group>"; };
 		B10202 /* NodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeRow.swift; sourceTree = "<group>"; };
@@ -297,6 +299,7 @@
 			isa = PBXGroup;
 			children = (
 				T10007 /* PerAppProxySettingsTests.swift */,
+				T10021 /* BypassGroupDetectionTests.swift */,
 			);
 			path = BaoLianDengTests;
 			sourceTree = "<group>";
@@ -469,6 +472,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				T10008 /* PerAppProxySettingsTests.swift in Sources */,
+				T10022 /* BypassGroupDetectionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

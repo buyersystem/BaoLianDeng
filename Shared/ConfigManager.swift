@@ -103,8 +103,13 @@ final class ConfigManager {
             .map(\.name)
     }
 
-    /// Update all select-type proxy groups to contain only the selected node.
-    /// This ensures the correct node is active from startup without needing REST API selection.
+    /// Update every select-type proxy group to put the user's selected node first
+    /// — except groups whose existing default (first listed proxy) is a bypass
+    /// member (`DIRECT`, `REJECT`, or a nested group that resolves to those).
+    /// Those are treated as bypass / blocklist groups (e.g. CN-direct categories
+    /// or ad-blockers) and left untouched. The selected node is only injected
+    /// into groups that already list it as a member, so we never invent
+    /// membership the user didn't grant.
     func applySelectedNode() {
         let defaults = AppConstants.sharedDefaults
         guard let selectedNode = defaults.string(forKey: "selectedNode"), !selectedNode.isEmpty else {
@@ -113,13 +118,35 @@ final class ConfigManager {
         guard var yaml = try? loadConfig() else { return }
 
         var groups = parseProxyGroups(from: yaml)
+        let groupMembers = Dictionary(uniqueKeysWithValues: groups.map { ($0.name, $0.proxies) })
         var changed = false
         for i in groups.indices where groups[i].type == "select" {
-            // Move selected node to front (index 0) so SelectorGroup defaults to it,
-            // but keep all other members so the user can switch nodes at runtime.
             var members = groups[i].proxies
-            members.removeAll { $0 == selectedNode }
-            members.insert(selectedNode, at: 0)
+            // Skip bypass groups: the first listed proxy resolves to DIRECT or
+            // REJECT (directly or via a nested group), meaning the group is
+            // configured to bypass the proxy by default.
+            guard let first = members.first else { continue }
+            if isBypassGroup(firstMember: first, groupMembers: groupMembers) { continue }
+
+            let promoted: String
+            if members.contains(selectedNode) {
+                // Explicit user choice wins: move the selected node to index 0.
+                promoted = selectedNode
+            } else if let bypass = firstBypassMember(in: members, groupMembers: groupMembers) {
+                // Group exposes a Direct/REJECT option but the user's selected
+                // node isn't a member. The subscription author listed the
+                // bypass entry for a reason (CN-direct category, ad-block, …),
+                // so prefer it over mihomo's "first listed proxy wins" default.
+                promoted = bypass
+            } else {
+                continue
+            }
+
+            // Move the promoted member to index 0 so SelectorGroup defaults to
+            // it, but keep all other members so the user can still switch at
+            // runtime.
+            members.removeAll { $0 == promoted }
+            members.insert(promoted, at: 0)
             groups[i].proxies = members
             changed = true
         }
@@ -194,25 +221,15 @@ final class ConfigManager {
         var hasGeoAutoUpdate = false
 
         var inTunBlock = false
-        var inDnsBlock = false
         lines = lines.map { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             // Track top-level block transitions
             if !trimmed.isEmpty && !line.hasPrefix(" ") && !line.hasPrefix("\t") {
                 inTunBlock = trimmed.hasPrefix("tun:")
-                inDnsBlock = trimmed.hasPrefix("dns:")
             }
             // Disable TUN mode — transparent proxy intercepts at socket level, no TUN needed
             if inTunBlock && trimmed.hasPrefix("enable:") {
                 return line.replacingOccurrences(of: "enable: true", with: "enable: false")
-            }
-            // Ensure Mihomo's DNS is enabled — transparent proxy forwards DNS queries to it
-            if inDnsBlock && trimmed.hasPrefix("enable:") {
-                return line.replacingOccurrences(of: "enable: false", with: "enable: true")
-            }
-            // Ensure redir-host mode (not fake-ip) — transparent proxy needs real IPs
-            if inDnsBlock && trimmed.hasPrefix("enhanced-mode:") {
-                return line.replacingOccurrences(of: "enhanced-mode: fake-ip", with: "enhanced-mode: redir-host")
             }
             // Disable automatic geo database updates
             if trimmed.hasPrefix("geo-auto-update:") {
@@ -241,24 +258,16 @@ final class ConfigManager {
     static func sanitizeConfigString(_ config: inout String) {
         config = config
             .replacingOccurrences(of: "geo-auto-update: true", with: "geo-auto-update: false")
-        // Disable TUN, enable DNS with redir-host — block-aware patching
+        // Disable TUN — transparent proxy intercepts at socket level.
         var lines = config.components(separatedBy: "\n")
         var inTunBlock = false
-        var inDnsBlock = false
         lines = lines.map { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty && !line.hasPrefix(" ") && !line.hasPrefix("\t") {
                 inTunBlock = trimmed.hasPrefix("tun:")
-                inDnsBlock = trimmed.hasPrefix("dns:")
             }
             if inTunBlock && trimmed.hasPrefix("enable:") {
                 return line.replacingOccurrences(of: "enable: true", with: "enable: false")
-            }
-            if inDnsBlock && trimmed.hasPrefix("enable:") {
-                return line.replacingOccurrences(of: "enable: false", with: "enable: true")
-            }
-            if inDnsBlock && trimmed.hasPrefix("enhanced-mode:") {
-                return line.replacingOccurrences(of: "enhanced-mode: fake-ip", with: "enhanced-mode: redir-host")
             }
             return line
         }
@@ -440,17 +449,11 @@ final class ConfigManager {
 
         dns:
           enable: true
-          ipv6: true
           listen: 127.0.0.1:1053
           enhanced-mode: redir-host
           nameserver:
             - 114.114.114.114
             - 223.5.5.5
-          fallback:
-            - 8.8.8.8
-            - 1.1.1.1
-          fallback-filter:
-            geoip: false
 
         proxies: []
 
@@ -699,6 +702,67 @@ extension ConfigManager {
         }
         return s
     }
+}
+
+/// Returns true if `name` refers to `DIRECT`, `REJECT`, or a proxy group
+/// whose members are all (recursively) bypass members. Used to detect
+/// bypass / blocklist groups so we don't inject the user's selected node
+/// into them. `groupMembers` maps group name → its ordered members list.
+func isBypassMember(
+    _ name: String,
+    groupMembers: [String: [String]],
+    seen: inout Set<String>
+) -> Bool {
+    if name == "DIRECT" || name == "REJECT" { return true }
+    guard let members = groupMembers[name] else { return false } // real proxy
+    if !seen.insert(name).inserted { return false }              // cycle guard
+    guard !members.isEmpty else { return false }
+    return members.allSatisfy { isBypassMember($0, groupMembers: groupMembers, seen: &seen) }
+}
+
+/// Returns true if a group whose first listed member is `firstMember`
+/// should be treated as a bypass group and skipped when injecting the
+/// user's selected node. The first member is the group's default
+/// selection in mihomo, so we key the decision off it.
+func isBypassGroup(firstMember: String, groupMembers: [String: [String]]) -> Bool {
+    var seen: Set<String> = []
+    return isBypassMember(firstMember, groupMembers: groupMembers, seen: &seen)
+}
+
+/// Returns true if `name` is `DIRECT`/`REJECT`, or refers to a proxy group
+/// whose runtime default (its first listed member) is itself first-default
+/// bypass. Models mihomo's actual routing: a `type: select` group's active
+/// selection is the first listed member until the user changes it, so a
+/// group like `🎯Direct: [DIRECT, Proxies]` defaults to `DIRECT` even
+/// though it isn't all-members-bypass.
+func isFirstDefaultBypass(
+    _ name: String,
+    groupMembers: [String: [String]],
+    seen: inout Set<String>
+) -> Bool {
+    if name == "DIRECT" || name == "REJECT" { return true }
+    guard let members = groupMembers[name] else { return false } // real proxy
+    if !seen.insert(name).inserted { return false }              // cycle guard
+    guard let first = members.first else { return false }
+    return isFirstDefaultBypass(first, groupMembers: groupMembers, seen: &seen)
+}
+
+/// Return the first member of `members` whose mihomo runtime default
+/// resolves to DIRECT/REJECT, or nil if none. Used to promote a
+/// direct-like option when the user's selected node is not a member of
+/// this group — matches the subscription author's intent that "this group
+/// exposes a Direct option because it's meant to bypass".
+func firstBypassMember(
+    in members: [String],
+    groupMembers: [String: [String]]
+) -> String? {
+    for member in members {
+        var seen: Set<String> = []
+        if isFirstDefaultBypass(member, groupMembers: groupMembers, seen: &seen) {
+            return member
+        }
+    }
+    return nil
 }
 
 enum ConfigError: LocalizedError {
