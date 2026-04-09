@@ -63,6 +63,13 @@ final class TrafficStore: ObservableObject {
     private var timer: Timer?
     private let defaults = AppConstants.sharedDefaults
     private var subscriptionNameCache: [String: String] = [:]
+    // Cached map of proxy-group name → member list, parsed from config.yaml.
+    // Used to classify mihomo connection chains: the /connections endpoint
+    // returns only group display names (e.g. "Apple", "🎯Direct") and the
+    // Rust mihomo fork's /proxies endpoint does not expose `all`/`now`, so
+    // we resolve group membership directly from the on-disk config.
+    private var groupMembersCache: [String: [String]] = [:]
+    private var lastGroupRefresh: Date = .distantPast
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -81,12 +88,24 @@ final class TrafficStore: ObservableObject {
         stopPolling()
         currentDate = Self.dateFormatter.string(from: Date())
         refreshSubscriptionCache()
+        refreshGroupMembers()
         fetchConnections()
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.fetchConnections()
             }
         }
+    }
+
+    /// Reload the group→members map from the on-disk config. Refreshed at
+    /// startPolling time and lazily when stale — the user can edit the
+    /// config mid-session via ConfigEditor, so we don't pin it to just the
+    /// startup parse.
+    private func refreshGroupMembers() {
+        guard let yaml = try? ConfigManager.shared.loadConfig() else { return }
+        let groups = ConfigManager.shared.parseProxyGroups(from: yaml)
+        groupMembersCache = Dictionary(uniqueKeysWithValues: groups.map { ($0.name, $0.proxies) })
+        lastGroupRefresh = Date()
     }
 
     private func refreshSubscriptionCache() {
@@ -158,6 +177,12 @@ final class TrafficStore: ObservableObject {
             todayBaseDownload = 0
         }
 
+        // Refresh the group map at most every 30s so mid-session config
+        // edits (via ConfigEditor) are eventually reflected.
+        if Date().timeIntervalSince(lastGroupRefresh) > 30 {
+            refreshGroupMembers()
+        }
+
         var proxyCount = 0
         for conn in connections {
             let chains = conn["chains"] as? [String] ?? []
@@ -186,11 +211,19 @@ final class TrafficStore: ObservableObject {
     }
 
     private func isDirect(chains: [String]) -> Bool {
-        if chains.count == 1 && chains[0].uppercased() == "DIRECT" {
-            return true
-        }
-        if chains.isEmpty {
-            return true
+        // A connection is direct if any element in its chain resolves to
+        // DIRECT/REJECT. For real outbounds that's a literal match; for
+        // selector groups we walk the cached config-time group map via
+        // isFirstDefaultBypass — which recursively follows each group's
+        // first listed member (the runtime default after applySelectedNode
+        // rewrites the config to put the chosen member at index 0). Empty
+        // chains are treated as direct defensively.
+        if chains.isEmpty { return true }
+        for element in chains {
+            var seen: Set<String> = []
+            if isFirstDefaultBypass(element, groupMembers: groupMembersCache, seen: &seen) {
+                return true
+            }
         }
         return false
     }
